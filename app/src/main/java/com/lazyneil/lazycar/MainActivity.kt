@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity() {
         p = Prefs(this)
         amoledApplied = p.amoled
         accentApplied = p.accent
+        Accent.apply(this)
         if (p.amoled) theme.applyStyle(R.style.ThemeOverlay_LazyCar_Amoled, true)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -124,11 +125,18 @@ class MainActivity : AppCompatActivity() {
         fun paint(bg: Int, fg: Int) {
             btn.backgroundTintList = android.content.res.ColorStateList.valueOf(bg); btn.setTextColor(fg)
         }
-        btn.alpha = 1f; btn.isEnabled = true
+        btn.alpha = 1f; btn.isEnabled = true; btn.icon = null
+        fun busySpinner() {
+            btn.isEnabled = false; paint(busy, secondary)
+            val spec = com.google.android.material.progressindicator.CircularProgressIndicatorSpec(this, null)
+            spec.indicatorSize = dp(24); spec.trackThickness = dp(3); spec.indicatorColors = intArrayOf(secondary)
+            btn.icon = com.google.android.material.progressindicator.IndeterminateDrawable.createCircularDrawable(this, spec)
+            btn.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START; btn.iconSize = dp(24); btn.iconPadding = dp(12)
+        }
         when (GoAction.effectiveState(p)) {
             GoAction.ON -> { btn.text = "STOP"; paint(error, onAccent) }
-            GoAction.STARTING -> { btn.text = "Starting…"; btn.isEnabled = false; paint(busy, secondary) }
-            GoAction.STOPPING -> { btn.text = "Stopping…"; btn.isEnabled = false; paint(busy, secondary) }
+            GoAction.STARTING -> { btn.text = "Starting..."; busySpinner() }
+            GoAction.STOPPING -> { btn.text = "Stopping..."; busySpinner() }
             else -> { btn.text = "GO"; paint(accent, onAccent) }
         }
     }

@@ -79,7 +79,7 @@
                     <View
                         android:layout_width="4dp"
                         android:layout_height="match_parent"
-                        android:background="@color/accent" />
+                        android:background="?attr/colorPrimary" />
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -185,7 +185,7 @@
                                 android:layout_height="wrap_content"
                                 android:minWidth="0dp"
                                 android:text="Volume"
-                                android:textColor="@color/accent" />
+                                android:textColor="?attr/colorPrimary" />
                             <com.google.android.material.slider.Slider
                                 android:id="@+id/vol1Slider"
                                 android:layout_width="0dp"
@@ -223,7 +223,7 @@
                                 android:layout_height="wrap_content"
                                 android:minWidth="0dp"
                                 android:text="Volume"
-                                android:textColor="@color/accent" />
+                                android:textColor="?attr/colorPrimary" />
                             <com.google.android.material.slider.Slider
                                 android:id="@+id/vol2Slider"
                                 android:layout_width="0dp"
@@ -252,6 +252,6 @@
         android:textColor="@color/onAccent"
         android:textSize="22sp"
         android:textStyle="bold"
-        app:backgroundTint="@color/accent"
+        app:backgroundTint="?attr/colorPrimary"
         app:cornerRadius="38dp" />
 </FrameLayout>

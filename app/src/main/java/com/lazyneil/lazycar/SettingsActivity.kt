@@ -29,6 +29,7 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         p = Prefs(this)
+        Accent.apply(this)
         if (p.amoled) theme.applyStyle(R.style.ThemeOverlay_LazyCar_Amoled, true)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -102,7 +103,7 @@ class SettingsActivity : AppCompatActivity() {
         val row = findViewById<View>(R.id.a11yRow)
         if (on) {
             icon.setImageResource(R.drawable.ic_check_circle)
-            icon.setColorFilter(getColor(R.color.accent))
+            icon.setColorFilter(Accent.color(this))
             text.text = "Auto-tap ready"
             row.setOnClickListener(null); row.isClickable = false
         } else {
@@ -164,7 +165,7 @@ class SettingsActivity : AppCompatActivity() {
         val grid = GridLayout(this).apply { columnCount = 4; val pad = dp(12); setPadding(pad, pad, pad, pad) }
         val cur = p.accent
         lateinit var dialog: androidx.appcompat.app.AlertDialog
-        Accent.swatches.forEach { (label, value) ->
+        Accent.swatches(this).forEach { (label, value) ->
             val fill = if (value == 0) Accent.systemColor(this) else value
             grid.addView(View(this).apply {
                 background = GradientDrawable().apply {
