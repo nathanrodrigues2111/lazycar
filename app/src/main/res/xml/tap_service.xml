@@ -4,6 +4,5 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:canRetrieveWindowContent="true"
     android:accessibilityFlags="flagReportViewIds"
-    android:packageNames="com.android.systemui"
     android:notificationTimeout="100"
     android:description="@string/tap_service_desc" />

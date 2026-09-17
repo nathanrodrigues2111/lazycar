@@ -22,4 +22,11 @@ class Prefs(ctx: Context) {
     var headunit: Boolean get() = b("headunit", false); set(v) = putB("headunit", v)
     var dualAudio: Boolean get() = b("dual", true); set(v) = putB("dual", v)
     var amoled: Boolean get() = b("amoled", true); set(v) = putB("amoled", v)
+    var btOffOnStop: Boolean get() = b("btoff", false); set(v) = putB("btoff", v)
+    private fun i(k: String, def: Int) = sp.getInt(k, def)
+    private fun l(k: String, def: Long) = sp.getLong(k, def)
+    // GO state machine: 0 IDLE, 1 STARTING, 2 ON, 3 STOPPING. Writing state stamps the time.
+    var state: Int get() = i("state", 0)
+        set(v) = sp.edit().putInt("state", v).putLong("stateTs", System.currentTimeMillis()).apply()
+    val stateTs: Long get() = l("stateTs", 0L)
 }

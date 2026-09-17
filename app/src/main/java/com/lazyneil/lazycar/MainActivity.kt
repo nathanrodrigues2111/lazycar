@@ -5,8 +5,12 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Bundle
@@ -34,6 +38,8 @@ private const val BT_ICON = android.R.drawable.stat_sys_data_bluetooth
 class MainActivity : AppCompatActivity() {
 
     private lateinit var p: Prefs
+    private var goBg: ColorStateList? = null
+    private var goFg: Int = 0
     private var players = listOf<Triple<String, String, Drawable?>>()   // pkg,label,icon
     private var audioDevices = listOf<Triple<String, String, Int>>()    // mac,name,iconRes
     private var allDevices = listOf<Triple<String, String, Int>>()
@@ -51,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        findViewById<MaterialButton>(R.id.goButton).let { goBg = it.backgroundTintList; goFg = it.currentTextColor }
         selPlayer = p.playerPkg
         selMac1 = p.mac1; selName1 = p.name1
         selMac2 = p.mac2; selName2 = p.name2
@@ -70,24 +77,126 @@ class MainActivity : AppCompatActivity() {
         buildDevices()
         buildHeadunit()
 
-        findViewById<MaterialSwitch>(R.id.dualSwitch).isChecked = p.dualAudio
+        findViewById<MaterialSwitch>(R.id.dualSwitch).apply {
+            isChecked = p.dualAudio
+            setOnCheckedChangeListener { _, on -> p.dualAudio = on }
+        }
         findViewById<MaterialSwitch>(R.id.amoledSwitch).apply {
             isChecked = p.amoled
             setOnCheckedChangeListener { _, on -> if (on != p.amoled) { p.amoled = on; recreate() } }
         }
-        findViewById<MaterialButton>(R.id.goButton).setOnClickListener { save(); GoAction.run(applicationContext) }
-        findViewById<MaterialButton>(R.id.saveButton).setOnClickListener { save() }
-        findViewById<MaterialButton>(R.id.accessibilityBtn).setOnClickListener {
+        findViewById<MaterialSwitch>(R.id.btOffSwitch).apply {
+            isChecked = p.btOffOnStop
+            setOnCheckedChangeListener { _, on -> p.btOffOnStop = on }
+        }
+        findViewById<MaterialButton>(R.id.goButton).setOnClickListener {
+            if (GoAction.effectiveState(p) == GoAction.IDLE) save()   // GO saves the form; STOP just runs
+            startActivity(Intent(this, GoActivity::class.java))       // GoActivity derives GO vs STOP
+        }
+    }
+
+    private var btReceiver: BroadcastReceiver? = null
+
+    override fun onResume() {
+        super.onResume()
+        refreshSetup()
+        buildDevices()                       // refresh the "Bluetooth is off" note/button live
+        refreshGoButton()
+        GoAction.deriveState(applicationContext, p) { refreshGoButton() }   // match reality after reboot
+        if (btReceiver == null) {
+            btReceiver = object : BroadcastReceiver() {
+                override fun onReceive(c: Context, i: Intent) { buildDevices(); refreshGoButton() }
+            }
+            registerReceiver(btReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        save()   // autosave (covers the IP text field and any last change)
+        btReceiver?.let { try { unregisterReceiver(it) } catch (e: Exception) {} }
+        btReceiver = null
+    }
+
+    private fun refreshGoButton() {
+        val btn = findViewById<MaterialButton>(R.id.goButton)
+        fun paint(bg: ColorStateList?, fg: Int) {
+            btn.backgroundTintList = bg; btn.setTextColor(fg)
+            btn.iconTint = ColorStateList.valueOf(fg)
+        }
+        btn.alpha = 1f; btn.isEnabled = true
+        when (GoAction.effectiveState(p)) {
+            GoAction.ON -> {
+                btn.text = "STOP"; btn.setIconResource(R.drawable.ic_stop_white)
+                paint(ColorStateList.valueOf(0xFFB3261E.toInt()), 0xFFFFFFFF.toInt())
+            }
+            GoAction.STARTING -> { btn.text = "Starting\u2026"; btn.isEnabled = false; btn.alpha = 0.6f; paint(goBg, goFg) }
+            GoAction.STOPPING -> { btn.text = "Stopping\u2026"; btn.isEnabled = false; btn.alpha = 0.6f; paint(goBg, goFg) }
+            else -> { btn.text = "GO"; btn.setIconResource(R.drawable.ic_car_white); paint(goBg, goFg) }
+        }
+    }
+
+    private fun refreshSetup() {
+        val a11y = accessibilityEnabled()
+        val btOk = ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
+
+        // Auto-tap status row: shown only while OFF (with warning), hidden once enabled.
+        val row = findViewById<View>(R.id.autoTapRow)
+        if (a11y) {
+            row.visibility = View.GONE
+        } else {
+            row.visibility = View.VISIBLE
+            findViewById<ImageView>(R.id.autoTapIcon).apply {
+                setImageResource(R.drawable.ic_error_outline)
+                setColorFilter(0xFFB3261E.toInt())
+            }
+            findViewById<TextView>(R.id.autoTapText).text = "Auto-tap off – tap to set up"
+            row.setOnClickListener { openAccessibilitySettings() }
+        }
+
+        // Top setup card: show the single most important pending action.
+        val card = findViewById<View>(R.id.setupCard)
+        val title = findViewById<TextView>(R.id.setupTitle)
+        val body = findViewById<TextView>(R.id.setupBody)
+        val btn = findViewById<MaterialButton>(R.id.setupBtn)
+        when {
+            !a11y -> {
+                title.text = "⚠ Setup needed"
+                body.text = "For one-tap dual audio, turn on the LazyCar auto-tap service:\n" +
+                    "1. Tap Open settings\n" +
+                    "2. Find LazyCar under Installed apps / Downloaded services\n" +
+                    "3. Turn it on, then tap Allow"
+                btn.text = "Open settings"
+                btn.setOnClickListener { openAccessibilitySettings() }
+                card.visibility = View.VISIBLE
+            }
+            !btOk -> {
+                title.text = "⚠ Bluetooth permission needed"
+                body.text = "LazyCar needs the Nearby devices (Bluetooth) permission to see your paired speakers."
+                btn.text = "Grant permission"
+                btn.setOnClickListener {
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
+                }
+                card.visibility = View.VISIBLE
+            }
+            else -> card.visibility = View.GONE
+        }
+    }
+
+    private fun openAccessibilitySettings() {
+        val cn = ComponentName(this, TapService::class.java).flattenToString()
+        try {
+            val args = Bundle().apply { putString(":settings:fragment_args_key", cn) }
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                .putExtra(":settings:fragment_args_key", cn)
+                .putExtra(":settings:show_fragment_args", args))
+        } catch (e: Exception) {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        val on = accessibilityEnabled()
-        findViewById<MaterialButton>(R.id.accessibilityBtn).text =
-            if (on) "Auto-tap: on ✓" else "Auto-tap: off — tap to enable"
-    }
+
 
     private fun accessibilityEnabled(): Boolean {
         val flat = Settings.Secure.getString(contentResolver,
@@ -146,7 +255,7 @@ class MainActivity : AppCompatActivity() {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("Player")
-            .setAdapter(adapter) { d, which -> selPlayer = players[which].first; renderPlayer(); d.dismiss() }
+            .setAdapter(adapter) { d, which -> selPlayer = players[which].first; renderPlayer(); save(); d.dismiss() }
             .show()
     }
 
@@ -204,10 +313,10 @@ class MainActivity : AppCompatActivity() {
                 .setSingleChoiceItems(names, checked) { d, which ->
                     set(items[which].first, items[which].second)
                     renderDevice(iconId, valueId, default, items[which].first, items)
-                    d.dismiss()
+                    save(); d.dismiss()
                 }
                 .setNeutralButton("Clear") { _, _ ->
-                    set("", ""); renderDevice(iconId, valueId, default, "", items)
+                    set("", ""); renderDevice(iconId, valueId, default, "", items); save()
                 }
                 .show()
         }
@@ -248,7 +357,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildHeadunit() {
-        findViewById<MaterialSwitch>(R.id.headunitSwitch).isChecked = p.headunit
+        findViewById<MaterialSwitch>(R.id.headunitSwitch).apply {
+            isChecked = p.headunit
+            setOnCheckedChangeListener { _, on -> p.headunit = on }
+        }
         findViewById<TextInputEditText>(R.id.ipField).setText(p.headunitIp)
         val d = GoAction.detectHeadunit(this)
         findViewById<TextView>(R.id.headunitDetected).text =
@@ -262,9 +374,8 @@ class MainActivity : AppCompatActivity() {
         p.mac3 = selMac3; p.name3 = selName3
         p.headunit = findViewById<MaterialSwitch>(R.id.headunitSwitch).isChecked
         p.headunitIp = findViewById<TextInputEditText>(R.id.ipField).text.toString().trim()
-        p.dualAudio = findViewById<MaterialSwitch>(R.id.dualSwitch).isChecked
         p.amoled = findViewById<MaterialSwitch>(R.id.amoledSwitch).isChecked
-        toast("Saved")
+        p.btOffOnStop = findViewById<MaterialSwitch>(R.id.btOffSwitch).isChecked
     }
 
     private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
