@@ -109,12 +109,16 @@ object GoAction {
             val shareAt = netAt + (if (musicActive) 0L else 1000L)
             val wantShare = p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()
             val alreadyGrouped = p.grouped && !need1 && !need2
+            // Open the output panel to group speakers when needed, OR just to set per-device volume
+            // (volOnN) even when already grouped, otherwise dragged volumes would never be applied.
+            val volumesWanted = (p.volOn1 && p.name1.isNotEmpty()) || (p.volOn2 && p.name2.isNotEmpty())
+            val wantPanel = (wantShare && !alreadyGrouped) || volumesWanted
             when {
-                wantShare && !alreadyGrouped -> {
+                wantPanel -> {
                     main.postDelayed({ shareAudio(ctx, p.mac1, p.mac2, p.playerPkg) }, shareAt)
                     doneAt = maxOf(doneAt, shareAt + 9500L)   // poll's 8.5s window + dismiss
                 }
-                alreadyGrouped -> log("skipped share (already grouped)")
+                alreadyGrouped -> log("skipped share (already grouped, no volume set)")
             }
 
             if (musicActive) log("skipped MEDIA_PLAY (music active)")
@@ -166,7 +170,7 @@ object GoAction {
     /**
      * Opens the OnePlus output switcher and lets TapService add the second speaker to the group.
      * MediaRouter2 can't do it (the app only sees DEFAULT_ROUTE) and the OnePlus startSharing API
-     * needs the signature perm com.oplus.permission.safe.BLUETOOTH — see reverse/SHARING_API.md.
+     * needs the signature perm com.oplus.permission.safe.BLUETOOTH - see reverse/SHARING_API.md.
      */
     fun shareAudio(ctx: Context, mac1: String, mac2: String, playerPkg: String) {
         try {
@@ -185,7 +189,9 @@ object GoAction {
      */
     fun setNetwork(data: Boolean?, hotspot: Boolean?, record: Boolean) {
         val t = mutableListOf<TapService.Tile>()
-        if (data != null) t += TapService.Tile(listOf("Mobile data"), data, if (record) "snapData" else "", "mobile data")
+        // The mobile-data tile desc is "SIM1, Mobile data off" when off but only "SIM1, " when on,
+        // so match on "SIM1" (present in both) with "Mobile data" as a fallback for other ROMs.
+        if (data != null) t += TapService.Tile(listOf("SIM1", "Mobile data"), data, if (record) "snapData" else "", "mobile data")
         if (hotspot != null) t += TapService.Tile(listOf("hotspot"), hotspot, if (record) "snapHotspot" else "", "hotspot")
         if (t.isNotEmpty()) { log("network: ${t.joinToString { "${it.feature}->${it.wantOn}" }}"); TapService.armTiles(t) }
     }
@@ -306,7 +312,7 @@ object GoAction {
     /**
      * Turn BT off the same way we turn it on: try the silent disable, then pop the system
      * REQUEST_DISABLE dialog and let TapService confirm it (com.oplus.wirelesssettings). Waits for
-     * STATE_OFF; on timeout it only logs. No toasts — either it happens or it's in the log.
+     * STATE_OFF; on timeout it only logs. No toasts - either it happens or it's in the log.
      */
     private fun disableBt(ctx: Context) {
         val adapter = adapterOf(ctx) ?: return

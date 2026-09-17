@@ -169,17 +169,32 @@ class TapService : AccessibilityService() {
             val title = rowTitle(n) ?: descName(n) ?: return@forEach
             val t = targets.firstOrNull { it.first.equals(title, true) } ?: return@forEach
             if (title in volSet) return@forEach
+            // In a sharing group the per-device volume_seekbar is disabled (there's one group master),
+            // and SET_PROGRESS on a disabled node is a no-op that still reports ok. Don't fake success.
+            if (!n.isEnabled) { volSet.add(title); android.util.Log.e("LazyCar", "volume '$title' slider disabled (grouped, not settable on this ROM)"); return@forEach }
             val pct = t.second.second.coerceIn(0, 100)
             val value = range.min + (range.max - range.min) * pct / 100f
             val b = android.os.Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, value) }
+            val before = range.current
             val ok = n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, b)
-            android.util.Log.e("LazyCar", "TapService set volume '$title' -> $pct% (=$value in ${range.min}..${range.max}) ok=$ok")
-            if (ok) { volSet.add(title); return@forEach }
+            android.util.Log.e("LazyCar", "volume '$title' -> $value ($pct%, range ${range.min}..${range.max}, before=$before) ok=$ok")
+            if (ok) { volSet.add(title); h.postDelayed({ verifyVolume(title, value) }, 300); return@forEach }
             // Retry on later polls (slider may not be ready), but give up after a few tries: a
             // sharing-group secondary member's slider rejects SET_PROGRESS on this ROM.
             val tries = (volTries[title] ?: 0) + 1; volTries[title] = tries
-            if (tries >= 3) { volSet.add(title); android.util.Log.e("LazyCar", "TapService giving up volume '$title' (slider not settable)") }
+            if (tries >= 3) { volSet.add(title); android.util.Log.e("LazyCar", "volume '$title' giving up (slider not settable)") }
         }
+    }
+
+    /** Re-scan the panel and log the slider's current value, to confirm the set stuck. */
+    private fun verifyVolume(title: String, target: Float) {
+        for (w in (windows ?: emptyList())) {
+            val root = w.root ?: continue
+            if (root.packageName != "com.android.systemui") continue
+            val n = find(root) { it.rangeInfo != null && (rowTitle(it) ?: descName(it))?.equals(title, true) == true }
+            if (n != null) { android.util.Log.e("LazyCar", "volume '$title' verify current=${n.rangeInfo?.current} (target $target)"); return }
+        }
+        android.util.Log.e("LazyCar", "volume '$title' verify: slider gone")
     }
 
     /** Pull "NAME" out of a "Connected to NAME." style contentDescription. */

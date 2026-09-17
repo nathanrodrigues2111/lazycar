@@ -14,7 +14,7 @@ import android.os.Looper
 /**
  * Short-lived foreground service that owns the GO/STOP sequence. Running as a foreground service
  * keeps the process (and GoAction's postDelayed chain + BT-enable receiver) alive independently of
- * any activity — GoActivity finishes immediately, so the system-enable dialog can take focus.
+ * any activity - GoActivity finishes immediately, so the system-enable dialog can take focus.
  */
 class GoService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null

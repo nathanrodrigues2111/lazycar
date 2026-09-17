@@ -48,7 +48,7 @@ Two extra switches:
 ## Notes
 
 Bluetooth connect uses the A2DP/Headset profile proxy via reflection, which is
-best-effort — failures show a Toast, they never crash the app. If a device
+best-effort - failures show a Toast, they never crash the app. If a device
 won't connect on your ROM, that's the piece to revisit (`GoAction.connectA2dp`).
 
 ## Head unit / Android Auto (tablet setup)
