@@ -1,7 +1,10 @@
 package com.lazyneil.lazycar
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.content.Intent
+import android.graphics.Path
+import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -61,8 +64,9 @@ class TapService : AccessibilityService() {
     private var pollN = 0
     private var dialogSeen = false
     private var reSent = false
-    private val volSet = Collections.synchronizedSet(mutableSetOf<String>())
-    private val volTries = Collections.synchronizedMap(mutableMapOf<String, Int>())
+    private val volSet = Collections.synchronizedSet(mutableSetOf<String>())      // apply kicked off
+    private val volResolved = Collections.synchronizedSet(mutableSetOf<String>()) // verified or gave up
+    @Volatile private var volFirstAt = 0L                                         // first slider touched
     private var tileOpened = false
     private var tileFinished = false
     private val tileDone = Collections.synchronizedSet(mutableSetOf<String>())
@@ -95,7 +99,7 @@ class TapService : AccessibilityService() {
     // ---- polling add-to-group ----
 
     fun startAddsPoll() {
-        pollN = 0; dialogSeen = false; reSent = false; volSet.clear(); volTries.clear()
+        pollN = 0; dialogSeen = false; reSent = false; volSet.clear(); volResolved.clear(); volFirstAt = 0L
         h.removeCallbacks(pollRunnable)
         h.post(pollRunnable)
     }
@@ -134,9 +138,11 @@ class TapService : AccessibilityService() {
             if (!dialogSeen && pollN >= 4 && !reSent) { reSent = true; reopenSwitcher() }
 
             // Done when everything connected is grouped (no Add rows, >=2 Remove) AND every
-            // "set volume on GO" slider has been applied. Window timeout is the fallback.
-            val volDone = listOf(prefs.name1 to prefs.volOn1, prefs.name2 to prefs.volOn2)
-                .none { it.first.isNotEmpty() && it.second && it.first !in volSet }
+            // "set volume on GO" slider has been VERIFIED (or the 3s gesture budget elapsed) so we
+            // never BACK out mid-gesture. Window timeout is the outer fallback.
+            val volTimedOut = volFirstAt != 0L && SystemClock.uptimeMillis() - volFirstAt > 3000L
+            val volDone = volTimedOut || listOf(prefs.name1 to prefs.volOn1, prefs.name2 to prefs.volOn2)
+                .none { it.first.isNotEmpty() && it.second && it.first !in volResolved }
             if (dialogSeen && adds == 0 && removes >= 2 && volDone) { finishPoll(); return }
             h.postDelayed(this, 400)
         }
@@ -158,9 +164,10 @@ class TapService : AccessibilityService() {
     /**
      * Set each speaker's slider to its saved level (Prefs.volN) when "Set volume on GO" (volOnN) is on.
      * Matches a slider by row title (falls back to positional order: name1 -> first volume_seekbar,
-     * name2 -> second). Scales 0-100 into the slider's own [min,max] via VolumeMath, verifies the
-     * value stuck (re-read), retries once, then falls back to AudioManager on the active stream.
-     * UNTESTED on device (phone unavailable); the OnePlus slider is known to be finicky.
+     * name2 -> second). Per slider we try the cheap ACTION_SET_PROGRESS first, then escalate through
+     * verifyVolume: a tap gesture, then a drag gesture. On the OnePlus 15 the per-device slider ACKs
+     * ACTION_SET_PROGRESS but ignores it, so the gesture is what actually moves it. Stream fallback is
+     * used ONLY when the slider node is absent. UNTESTED on device (phone unavailable).
      */
     private fun applyVolumes(root: AccessibilityNodeInfo, p: Prefs) {
         val targets = listOf(Triple(p.name1, p.volOn1, p.vol1), Triple(p.name2, p.volOn2, p.vol2))
@@ -168,24 +175,28 @@ class TapService : AccessibilityService() {
         if (targets.isEmpty()) return
         val sliders = mutableListOf<AccessibilityNodeInfo>()
         forEach(root) { if (it.rangeInfo != null) sliders.add(it) }
-        if (sliders.isEmpty()) return
+        if (sliders.isEmpty()) return    // panel not rendered yet; retry next poll
         for ((idx, t) in targets.withIndex()) {
             val name = t.first; if (name in volSet) continue
             val pct = t.third.coerceIn(0, 100)
             val node = sliders.firstOrNull { (rowTitle(it) ?: descName(it))?.equals(name, true) == true }
-                ?: sliders.getOrNull(idx) ?: continue
-            val range = node.rangeInfo ?: continue
-            if (!node.isEnabled) {   // disabled in a sharing group -> go straight to the stream fallback
-                android.util.Log.e("LazyCar", "volume '$name' slider disabled; stream fallback")
-                audioFallback(pct, name); volSet.add(name); continue
+                ?: sliders.getOrNull(idx)
+            if (node == null) {   // slider genuinely absent -> only case for the stream fallback
+                android.util.Log.e("LazyCar", "volume '$name' slider absent; stream fallback")
+                markKicked(name); audioFallback(pct, name); volResolved.add(name); continue
             }
+            val range = node.rangeInfo ?: continue
+            markKicked(name)
             val value = VolumeMath.toRange(pct, range.min, range.max)
-            val ok = setProgress(node, value)
-            android.util.Log.e("LazyCar", "volume '$name' -> $value ($pct%, ${range.min}..${range.max}, before=${range.current}) ok=$ok")
-            volSet.add(name)
-            if (ok) h.postDelayed({ verifyVolume(name, pct, value) }, 300)
-            else audioFallback(pct, name)
+            val ok = setProgress(node, value)          // cheap; verify decides if a gesture is needed
+            android.util.Log.e("LazyCar", "volume '$name' set_progress -> $value ($pct%, ${range.min}..${range.max}) ok=$ok")
+            h.postDelayed({ verifyVolume(name, pct, "set_progress") }, 350)
         }
+    }
+
+    private fun markKicked(name: String) {
+        if (volFirstAt == 0L) volFirstAt = SystemClock.uptimeMillis()
+        volSet.add(name)
     }
 
     private fun setProgress(n: AccessibilityNodeInfo, value: Float): Boolean {
@@ -193,30 +204,75 @@ class TapService : AccessibilityService() {
         return n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, b)
     }
 
-    /** Re-read the slider; if it didn't move, nudge once by +-1, else fall back to the stream volume. */
-    private fun verifyVolume(name: String, pct: Int, value: Float) {
-        var node: AccessibilityNodeInfo? = null
+    /**
+     * Re-read the slider; if within 4% of target, done. Otherwise escalate: set_progress -> tap
+     * gesture -> drag gesture. On the final "drag" pass we log whatever we got and stop. [via] is the
+     * method just attempted.
+     */
+    private fun verifyVolume(name: String, pct: Int, via: String) {
+        val node = findSlider(name) ?: run {
+            android.util.Log.e("LazyCar", "volume '$name' slider gone; stream fallback")
+            audioFallback(pct, name); volResolved.add(name); return
+        }
+        val range = node.rangeInfo ?: run { volResolved.add(name); return }
+        val target = VolumeMath.toRange(pct, range.min, range.max)
+        val actual = range.current
+        val tol = (range.max - range.min) * 0.04f
+        if (kotlin.math.abs(actual - target) <= tol || via == "drag") {
+            android.util.Log.e("LazyCar", "volume '$name' target=$target got=$actual via=$via")
+            volResolved.add(name); return
+        }
+        when (via) {
+            "set_progress" -> setSliderByGesture(node, pct / 100f,
+                gestureCb { h.postDelayed({ verifyVolume(name, pct, "tap") }, 350) })
+            "tap" -> {
+                val fromF = if (range.max > range.min) (actual - range.min) / (range.max - range.min) else 0f
+                dragSlider(node, fromF, pct / 100f,
+                    gestureCb { h.postDelayed({ verifyVolume(name, pct, "drag") }, 350) })
+            }
+        }
+    }
+
+    private fun findSlider(name: String): AccessibilityNodeInfo? {
         for (w in (windows ?: emptyList())) {
             val root = w.root ?: continue
             if (root.packageName != "com.android.systemui") continue
-            node = find(root) { it.rangeInfo != null && (rowTitle(it) ?: descName(it))?.equals(name, true) == true }
-            if (node != null) break
+            find(root) { it.rangeInfo != null && (rowTitle(it) ?: descName(it))?.equals(name, true) == true }
+                ?.let { return it }
         }
-        val range = node?.rangeInfo
-        val cur = range?.current
-        if (range != null && cur != null && kotlin.math.abs(cur - value) <= (range.max - range.min) * 0.03f) {
-            android.util.Log.e("LazyCar", "volume '$name' verify ok current=$cur"); return
-        }
-        val tries = volTries[name] ?: 0
-        if (node != null && range != null && tries < 1) {   // one nudge retry
-            volTries[name] = tries + 1
-            val nudged = if (value < range.max) value + 1f else value - 1f
-            val ok = setProgress(node, nudged)
-            android.util.Log.e("LazyCar", "volume '$name' retry -> $nudged ok=$ok (was current=$cur)")
-            h.postDelayed({ verifyVolume(name, pct, value) }, 300); return
-        }
-        android.util.Log.e("LazyCar", "volume '$name' did not stick (current=$cur target=$value); stream fallback")
-        audioFallback(pct, name)
+        return null
+    }
+
+    /** Tap the slider at [fraction] (0..1 of its usable length) via a gesture. */
+    fun setSliderByGesture(node: AccessibilityNodeInfo, fraction: Float, cb: GestureResultCallback?) {
+        val p = sliderPoint(node, fraction) ?: return
+        val path = Path().apply { moveTo(p.first, p.second) }
+        dispatchGesture(GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 60)).build(), cb, null)
+    }
+
+    /** Drag the thumb from [fromF] to [toF] along the slider. */
+    private fun dragSlider(node: AccessibilityNodeInfo, fromF: Float, toF: Float, cb: GestureResultCallback?) {
+        val a = sliderPoint(node, fromF) ?: return
+        val b = sliderPoint(node, toF) ?: return
+        val path = Path().apply { moveTo(a.first, a.second); lineTo(b.first, b.second) }
+        dispatchGesture(GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 250)).build(), cb, null)
+    }
+
+    /** Screen point for [fraction] of a slider. Vertical (height>width): measured from the bottom. */
+    private fun sliderPoint(node: AccessibilityNodeInfo, fraction: Float): Pair<Float, Float>? {
+        val r = Rect(); node.getBoundsInScreen(r)
+        if (r.width() <= 0 || r.height() <= 0) return null
+        return if (r.height() > r.width())
+            r.exactCenterX() to VolumeMath.fractionToX(r.top.toFloat(), r.height().toFloat(), 1f - fraction)
+        else
+            VolumeMath.fractionToX(r.left.toFloat(), r.width().toFloat(), fraction) to r.exactCenterY()
+    }
+
+    private fun gestureCb(after: () -> Unit) = object : GestureResultCallback() {
+        override fun onCompleted(d: GestureDescription?) { after() }
+        override fun onCancelled(d: GestureDescription?) { after() }
     }
 
     /** Absolute volume on the active A2DP sink via AudioManager (per-device sliders can fail on OnePlus). */

@@ -71,18 +71,27 @@ enabled_accessibility_services ...`) after either.
 ## Testing volume
 
 Per-output volume drives the switcher's `volume_seekbar` sliders through the
-accessibility service. On some ROMs (OnePlus 15 seen here) those sliders ignore
-`ACTION_SET_PROGRESS`, and the per-device sliders are disabled while grouped, so
-LazyCar verifies the value stuck, retries once, then falls back to
-`AudioManager.setStreamVolume` on the active stream.
+accessibility service. On some ROMs (OnePlus 15 seen here) those sliders ACK
+`ACTION_SET_PROGRESS` but ignore it, so per slider LazyCar tries
+`ACTION_SET_PROGRESS` first, verifies (re-reads `rangeInfo.current` after 350ms),
+and if the value is still more than 4% off it moves the slider with a real touch
+gesture (`dispatchGesture`, needs `android:canPerformGestures`): first a tap at
+the target position, then, if that misses, a drag from the current thumb to the
+target. The panel is held open until every slider verifies or a 3s budget
+elapses, so it never backs out mid-gesture. `AudioManager.setStreamVolume` is
+used only when the slider node is absent entirely.
 
 To test on a device:
 
 1. Set volumes in the app (a slider under each output; toggle "Volume" on).
 2. `adb shell am start -n com.lazyneil.lazycar/.GoActivity --ez volumeOnly true`
    opens the switcher and applies volumes only (no full GO).
-3. Watch `adb logcat -v time -s LazyCar:V` for `volume '<name>' ...`,
-   `verify ...`, `retry ...`, or `fallback ...` lines.
+3. Watch `adb logcat -v time -s LazyCar:V`. Each slider logs a
+   `volume '<name>' set_progress -> <v> ...` line, then exactly one resolution
+   line naming the method that landed it:
+   `volume '<name>' target=<v> got=<actual> via=set_progress|tap|drag`
+   (`got` should be within 4% of `target`). A missing slider instead logs
+   `volume '<name>' slider absent; stream fallback`.
 4. Dragging a slider in the app while state is ON also applies it live.
 
 Pure mapping logic lives in `VolumeMath`; run `./gradlew testDebugUnitTest`.

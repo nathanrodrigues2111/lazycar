@@ -16,6 +16,18 @@ class VolumeMathTest {
         assertEquals(100f, VolumeMath.toRange(250, 0f, 100f), 0.001f)
     }
 
+    @Test fun fractionToXInsetsBothEnds() {
+        // left=100, width=1000 (spans 100..1100) -> 4% inset = 40px, usable travel 140..1060
+        assertEquals(140f, VolumeMath.fractionToX(100f, 1000f, 0f), 0.001f)
+        assertEquals(1060f, VolumeMath.fractionToX(100f, 1000f, 1f), 0.001f)
+        assertEquals(600f, VolumeMath.fractionToX(100f, 1000f, 0.5f), 0.001f)
+    }
+
+    @Test fun fractionToXClampsOutOfRange() {
+        assertEquals(140f, VolumeMath.fractionToX(100f, 1000f, -0.5f), 0.001f)
+        assertEquals(1060f, VolumeMath.fractionToX(100f, 1000f, 2f), 0.001f)
+    }
+
     @Test fun streamIndexRounds() {
         assertEquals(0, VolumeMath.toStreamIndex(0, 15))
         assertEquals(15, VolumeMath.toStreamIndex(100, 15))
