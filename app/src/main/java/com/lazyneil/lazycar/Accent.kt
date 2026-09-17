@@ -60,7 +60,8 @@ object Accent {
         } catch (e: Exception) { lime }
     }
 
-    /** Readable foreground for a given accent: black on light accents, white on dark. */
+    /** Readable foreground for a given accent: black on all but very dark accents (threshold 0.18,
+     *  so mid-tone accents like the electric-blue pill get a black glyph/text, not white). */
     fun onColor(argb: Int): Int =
-        if (ColorUtils.calculateLuminance(argb) > 0.5) Color.BLACK else Color.WHITE
+        if (ColorUtils.calculateLuminance(argb) > 0.18) Color.BLACK else Color.WHITE
 }

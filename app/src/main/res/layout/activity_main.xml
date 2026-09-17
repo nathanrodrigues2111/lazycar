@@ -173,29 +173,6 @@
                             <TextView android:id="@+id/out1Value" style="@style/RowTitle" android:text="Output 1" />
                             <ImageView style="@style/ChevronIcon" />
                         </LinearLayout>
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/vol1Btn"
-                                style="@style/Widget.Material3.Button.TextButton"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:minWidth="0dp"
-                                android:text="Volume"
-                                android:textColor="?attr/colorPrimary" />
-                            <com.google.android.material.slider.Slider
-                                android:id="@+id/vol1Slider"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:valueFrom="0"
-                                android:valueTo="100"
-                                android:stepSize="1"
-                                android:visibility="gone" />
-                        </LinearLayout>
                     </LinearLayout>
 
                     <!-- Output 2 (dual only) -->
@@ -211,29 +188,32 @@
                             <TextView android:id="@+id/out2Value" style="@style/RowTitle" android:text="Output 2" />
                             <ImageView style="@style/ChevronIcon" />
                         </LinearLayout>
-                        <LinearLayout
-                            android:layout_width="match_parent"
+                    </LinearLayout>
+
+                    <!-- Start volume (single group level; OnePlus shares one level in Audio sharing) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/volBtn"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal">
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/vol2Btn"
-                                style="@style/Widget.Material3.Button.TextButton"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:minWidth="0dp"
-                                android:text="Volume"
-                                android:textColor="?attr/colorPrimary" />
-                            <com.google.android.material.slider.Slider
-                                android:id="@+id/vol2Slider"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:valueFrom="0"
-                                android:valueTo="100"
-                                android:stepSize="1"
-                                android:visibility="gone" />
-                        </LinearLayout>
+                            android:minWidth="0dp"
+                            android:text="Start volume"
+                            android:textColor="?attr/colorPrimary" />
+                        <com.google.android.material.slider.Slider
+                            android:id="@+id/volSlider"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:valueFrom="0"
+                            android:valueTo="100"
+                            android:stepSize="1"
+                            android:visibility="gone" />
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
 
@@ -14,20 +13,24 @@ class GoWidget : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
         val p = Prefs(ctx)
         val st = GoAction.effectiveState(p)
-        val pi = PendingIntent.getActivity(
-            ctx, 0, Intent(ctx, GoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        // Tap goes straight to the foreground service (user-initiated, so an FGS start is allowed).
+        // It must never open a LazyCar screen; GoService decides GO vs STOP itself.
+        val pi = PendingIntent.getForegroundService(
+            ctx, 0, Intent(ctx, GoService::class.java).setAction(GoService.ACTION_TOGGLE),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        // Black glyph on a state-coloured pill: accent when idle, red when ON, grey while busy
-        // (a spinner replaces the glyph while STARTING / STOPPING).
+        // Always the car glyph; state shows in the pill colour only. IDLE: accent pill + car.
+        // ON: red pill + white car. BUSY: grey pill + spinner (glyph hidden).
         val busy = st == GoAction.STARTING || st == GoAction.STOPPING
+        val accent = Accent.color(ctx)
+        val on = st == GoAction.ON
         val pillColor = when {
             busy -> 0xFF22252B.toInt()
-            st == GoAction.ON -> 0xFFFF5252.toInt()
-            else -> Accent.color(ctx)
+            on -> 0xFFFF5252.toInt()
+            else -> accent
         }
+        val glyphTint = if (on) 0xFF000000.toInt() else Accent.onColor(accent)
         val pill = android.content.res.ColorStateList.valueOf(pillColor)
-        val glyph = if (st == GoAction.ON) R.drawable.ic_stop_white else R.drawable.ic_car_glyph
         val desc = when (st) {
             GoAction.ON -> "LazyCar STOP"; GoAction.STARTING -> "LazyCar starting"
             GoAction.STOPPING -> "LazyCar stopping"; else -> "LazyCar GO"
@@ -36,8 +39,8 @@ class GoWidget : AppWidgetProvider() {
             val v = RemoteViews(ctx.packageName, R.layout.widget_go)
             v.setInt(R.id.widget_button, "setBackgroundResource", R.drawable.widget_bg)
             v.setColorStateList(R.id.widget_button, "setBackgroundTintList", pill)
-            v.setImageViewResource(R.id.widget_glyph, glyph)
-            v.setInt(R.id.widget_glyph, "setColorFilter", Color.BLACK)
+            v.setImageViewResource(R.id.widget_glyph, R.drawable.ic_car_glyph)
+            v.setInt(R.id.widget_glyph, "setColorFilter", glyphTint)
             v.setViewVisibility(R.id.widget_glyph, if (busy) View.INVISIBLE else View.VISIBLE)
             v.setViewVisibility(R.id.widget_progress, if (busy) View.VISIBLE else View.GONE)
             v.setContentDescription(R.id.widget_button, desc)

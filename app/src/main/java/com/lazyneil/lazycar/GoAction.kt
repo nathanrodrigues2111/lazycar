@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object GoAction {
     const val IDLE = 0; const val STARTING = 1; const val ON = 2; const val STOPPING = 3
+    const val ACTION_STATE = "com.lazyneil.lazycar.STATE"   // sticky-less local ping so an open MainActivity re-renders
     private const val STUCK_MS = 30000L
     val main = Handler(Looper.getMainLooper())
 
@@ -38,7 +39,15 @@ object GoAction {
         return s
     }
     private fun setState(ctx: Context, p: Prefs, st: Int) {
-        p.state = st; GoWidget.refresh(ctx); log("state -> $st")
+        p.state = st; GoWidget.refresh(ctx)
+        ctx.sendBroadcast(Intent(ACTION_STATE).setPackage(ctx.packageName))
+        log("state -> $st")
+        // Busy states auto-expire to IDLE after 30s (effectiveState); re-render the widget then too,
+        // so a killed/late sequence never leaves the spinner stuck. ponytail: handler only - fires if
+        // the process is still alive at +30s (it is, during any real sequence); no AlarmManager.
+        if (st == STARTING || st == STOPPING) main.postDelayed({
+            GoWidget.refresh(ctx); ctx.sendBroadcast(Intent(ACTION_STATE).setPackage(ctx.packageName))
+        }, STUCK_MS + 500L)
     }
 
     fun sequenceDuration(p: Prefs): Long {
@@ -51,6 +60,9 @@ object GoAction {
     /** Entry for GO. Returns ms the caller (service) should stay alive for the delayed steps. */
     fun run(ctx: Context): Long {
         val p = Prefs(ctx)
+        // Snapshot the pre-GO music level NOW, before BT-enable / A2DP connect makes OnePlus reset it.
+        p.snapMusicVol = try { (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager)
+            .getStreamVolume(AudioManager.STREAM_MUSIC) } catch (e: Exception) { -1 }
         setState(ctx, p, STARTING)
         val adapter = (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
             ?: BluetoothAdapter.getDefaultAdapter()
@@ -84,7 +96,8 @@ object GoAction {
             if (need1 || need2) p.grouped = false   // a fresh connection drops any prior sharing group
 
             val settle = if (need1 || need2) 2000L else 0L
-            val musicActive = (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val musicActive = am.isMusicActive
             // Snapshot pre-GO state (connected = probe result before we connect anything) so STOP can
             // restore exactly what it found: only undo what GO turned on.
             p.snapConn1 = p.mac1.isNotEmpty() && p.mac1 in connected
@@ -109,17 +122,19 @@ object GoAction {
             val shareAt = netAt + (if (musicActive) 0L else 1000L)
             val wantShare = p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()
             val alreadyGrouped = p.grouped && !need1 && !need2
-            // Open the output panel to group speakers when needed, OR just to set per-device volume
-            // (volOnN) even when already grouped, otherwise dragged volumes would never be applied.
-            val volumesWanted = (p.volOn1 && p.name1.isNotEmpty()) || (p.volOn2 && p.name2.isNotEmpty())
-            val wantPanel = (wantShare && !alreadyGrouped) || volumesWanted
-            when {
-                wantPanel -> {
-                    main.postDelayed({ shareAudio(ctx, p.mac1, p.mac2, p.playerPkg) }, shareAt)
-                    doneAt = maxOf(doneAt, shareAt + 9500L)   // poll's 8.5s window + dismiss
-                }
-                alreadyGrouped -> log("skipped share (already grouped, no volume set)")
-            }
+            // Open the output panel only to group the speakers for dual audio.
+            if (wantShare && !alreadyGrouped) {
+                main.postDelayed({ shareAudio(ctx, p.mac1, p.mac2, p.playerPkg) }, shareAt)
+                doneAt = maxOf(doneAt, shareAt + 9500L)   // poll's 8.5s window + dismiss
+            } else if (alreadyGrouped) log("skipped share (already grouped)")
+
+            // Start volume: OnePlus resets STREAM_MUSIC (often to max) as the sharing group forms and
+            // as the second A2DP sink connects, so a single set won't hold. Run a watchdog from just
+            // after connect through play that keeps re-asserting the target (setStreamVolume, then
+            // adjust nudges if the absolute-volume path ignores it), reacting to VOLUME_CHANGED too.
+            // Runs in the background; it must NOT gate the ON transition (a warm all-on GO stays <2s).
+            // The service already lives ~14s (sequenceDuration), which outlasts this window.
+            if (p.volOn) main.postDelayed({ enforceStartVolume(ctx, p.vol, 12000L) }, maxOf(settle, 300L))
 
             if (musicActive) log("skipped MEDIA_PLAY (music active)")
             else { main.postDelayed({ playMedia(ctx) }, shareAt + 1500); doneAt = maxOf(doneAt, shareAt + 1500) }
@@ -172,11 +187,69 @@ object GoAction {
      * MediaRouter2 can't do it (the app only sees DEFAULT_ROUTE) and the OnePlus startSharing API
      * needs the signature perm com.oplus.permission.safe.BLUETOOTH - see reverse/SHARING_API.md.
      */
-    /** Open the output panel just to (re)apply per-device volumes; the poll sets sliders and backs out. */
+    /** Live-apply the start volume to the grouped outputs (slider released while ON, or volumeOnly). */
     fun applyVolumesNow(ctx: Context) {
         val p = Prefs(ctx)
-        log("volumeOnly: opening panel to apply volumes")
-        shareAudio(ctx, p.mac1, p.mac2, p.playerPkg)
+        log("volumeOnly: enforcing start volume ${p.vol}%")
+        enforceStartVolume(ctx, p.vol, 3000L)
+    }
+
+    @Volatile private var volReceiver: BroadcastReceiver? = null
+
+    /**
+     * Drive STREAM_MUSIC to [pct] and HOLD it against OnePlus' group/A2DP absolute-volume resets for
+     * [budgetMs]: set it now, then re-check every 1s (max 5 corrections) and re-assert if it drifted
+     * by more than one index. A VOLUME_CHANGED receiver reacts to resets instantly during the window.
+     * Each correction logs before/after. STREAM_MUSIC is the shared level in OnePlus Audio sharing.
+     */
+    private fun enforceStartVolume(ctx: Context, pct: Int, budgetMs: Long) {
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val target = VolumeMath.toStreamIndex(pct, max)
+        // A2DP absolute volume quantizes coarsely (steps of ~max/16 on this ROM), so exact-match is
+        // impossible. Accept within one step; that still prevents the group's reset-to-max "blast".
+        val tol = maxOf(2, max / 16)
+        val startAt = SystemClock.uptimeMillis()
+        val total = java.util.concurrent.atomic.AtomicInteger(0)   // safety cap against pathological loops
+        fun cur() = try { am.getStreamVolume(AudioManager.STREAM_MUSIC) } catch (e: Exception) { target }
+        fun correct(reason: String) {
+            val before = cur()
+            if (kotlin.math.abs(before - target) <= tol) return   // already close enough; no fight, no storm
+            if (total.incrementAndGet() > 40) return
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+            var mid = cur()
+            if (kotlin.math.abs(mid - target) > tol) {   // exact set ignored: nudge toward target
+                var guard = 0
+                while (kotlin.math.abs(mid - target) > tol && guard < 30) {
+                    val dir = if (mid < target) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
+                    am.adjustStreamVolume(AudioManager.STREAM_MUSIC, dir, 0)
+                    val next = cur(); if (next == mid) break; mid = next; guard++
+                }
+            }
+            log("volume correct ($reason): $before -> ${cur()} target=$target±$tol/$max ($pct%)")
+        }
+        unregisterVol(ctx)
+        volReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) { correct("ext-change") }
+        }
+        try { androidx.core.content.ContextCompat.registerReceiver(ctx.applicationContext, volReceiver,
+            IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+            androidx.core.content.ContextCompat.RECEIVER_EXPORTED) } catch (e: Exception) {}
+        log("volume: enforce target=$target±$tol/$max ($pct%), start=${cur()}")
+        correct("initial")
+        val tick = object : Runnable {
+            override fun run() {
+                correct("watchdog")
+                if (SystemClock.uptimeMillis() - startAt < budgetMs) main.postDelayed(this, 800)
+                else { log("volume watchdog done: got=${cur()} target=$target±$tol (corrections=${total.get()})"); unregisterVol(ctx) }
+            }
+        }
+        main.postDelayed(tick, 800)
+    }
+
+    private fun unregisterVol(ctx: Context) {
+        volReceiver?.let { try { ctx.applicationContext.unregisterReceiver(it) } catch (e: Exception) {} }
+        volReceiver = null
     }
 
     fun shareAudio(ctx: Context, mac1: String, mac2: String, playerPkg: String) {
@@ -294,6 +367,13 @@ object GoAction {
 
         if (!p.snapMusicWasActive) { log("restore: music playing -> paused"); pauseMedia(ctx) }
         else log("restore: music was already playing -> left")
+
+        // Restore the pre-GO STREAM_MUSIC level if GO changed it.
+        if (p.volOn && p.snapMusicVol >= 0) try {
+            (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager)
+                .setStreamVolume(AudioManager.STREAM_MUSIC, p.snapMusicVol, 0)
+            log("restore: music volume -> index ${p.snapMusicVol}")
+        } catch (e: Exception) {}
 
         for ((mac, wasConnected) in listOf(p.mac1 to p.snapConn1, p.mac2 to p.snapConn2, p.mac3 to p.snapConn3))
             if (mac.isNotEmpty() && !wasConnected) { log("restore: $mac connected -> disconnected"); disconnectA2dp(ctx, mac) }

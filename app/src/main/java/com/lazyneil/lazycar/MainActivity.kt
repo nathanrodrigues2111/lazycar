@@ -92,6 +92,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var btReceiver: BroadcastReceiver? = null
+    private var stateReceiver: BroadcastReceiver? = null
+
+    // Re-render GO/STOP/spinner the moment GoAction changes state while we are open.
+    override fun onStart() {
+        super.onStart()
+        stateReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) { refreshGoButton() }
+        }
+        ContextCompat.registerReceiver(this, stateReceiver,
+            IntentFilter(GoAction.ACTION_STATE), ContextCompat.RECEIVER_NOT_EXPORTED)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        stateReceiver?.let { try { unregisterReceiver(it) } catch (e: Exception) {} }
+        stateReceiver = null
+    }
 
     override fun onResume() {
         super.onResume()
@@ -267,8 +284,7 @@ class MainActivity : AppCompatActivity() {
         bindOutput(true, dual)
         if (dual) bindOutput(false, true)
 
-        wireVol(R.id.vol1Btn, R.id.vol1Slider, { p.volOn1 }, { p.volOn1 = it }, { p.vol1 }, { p.vol1 = it })
-        wireVol(R.id.vol2Btn, R.id.vol2Slider, { p.volOn2 }, { p.volOn2 = it }, { p.vol2 }, { p.vol2 = it })
+        wireVol(R.id.volBtn, R.id.volSlider, { p.volOn }, { p.volOn = it }, { p.vol }, { p.vol = it })
     }
 
     private fun bindOutput(isOne: Boolean, dual: Boolean) {

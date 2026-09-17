@@ -40,7 +40,9 @@ class HelpActivity : AppCompatActivity() {
         "Does LazyCar send any data?" to
             "No. LazyCar sends no data anywhere. Everything happens on your phone.",
         "How do I add the widget?" to
-            "Long-press your home screen, tap Widgets, find LazyCar, and drag the GO widget where you want it."
+            "Long-press your home screen, tap Widgets, find LazyCar, and drag the GO widget where you want it.",
+        "Can I set the volume?" to
+            "Turn on Start volume and pick a level. GO sets it before the music starts, so it never blasts off. Volume applies to both outputs together: OnePlus shares one level in Audio sharing, so both speakers get louder or quieter as one."
     )
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()

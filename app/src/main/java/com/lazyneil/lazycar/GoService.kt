@@ -21,22 +21,33 @@ class GoService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(1, notification())
-        val dur = when (intent?.getStringExtra("action")) {
+        // Widget tap: derive GO vs STOP here so no LazyCar activity ever has to open.
+        val action = if (intent?.action == ACTION_TOGGLE) {
+            when (GoAction.effectiveState(Prefs(applicationContext))) {
+                GoAction.IDLE -> "go"
+                GoAction.ON -> "stop"
+                else -> { android.util.Log.e("LazyCar", "widget tap ignored (transitioning)"); null }
+            }
+        } else intent?.getStringExtra("action")
+        val dur = when (action) {
             "stop" -> GoAction.stop(applicationContext)
             "share" -> {
-                val m1 = intent.getStringExtra("mac1").orEmpty()
-                val m2 = intent.getStringExtra("mac2").orEmpty()
-                val pkg = intent.getStringExtra("player").orEmpty()
+                val m1 = intent?.getStringExtra("mac1").orEmpty()
+                val m2 = intent?.getStringExtra("mac2").orEmpty()
+                val pkg = intent?.getStringExtra("player").orEmpty()
                 GoAction.shareAudio(applicationContext, m1, m2, pkg); 9000L
             }
-            "volume" -> { GoAction.applyVolumesNow(applicationContext); 11000L }
-            else -> GoAction.run(applicationContext)
+            "volume" -> { GoAction.applyVolumesNow(applicationContext); 4000L }
+            "go" -> GoAction.run(applicationContext)
+            else -> 0L    // null / transitioning toggle: nothing to do, just fall through and stop
         }
         Handler(Looper.getMainLooper()).postDelayed({
             stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
         }, dur + 500L)
         return START_NOT_STICKY
     }
+
+    companion object { const val ACTION_TOGGLE = "com.lazyneil.lazycar.TOGGLE" }
 
     private fun notification(): Notification {
         val chId = "lazycar_go"

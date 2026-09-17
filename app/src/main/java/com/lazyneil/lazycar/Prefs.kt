@@ -41,12 +41,13 @@ class Prefs(ctx: Context) {
     var snapConn3: Boolean get() = b("snapC3", true); set(v) = putB("snapC3", v)
     var snapDataWasOn: Boolean get() = b("snapData", true); set(v) = putB("snapData", v)
     var snapHotspotWasOn: Boolean get() = b("snapHotspot", true); set(v) = putB("snapHotspot", v)
+    // GO-time STREAM_MUSIC index, restored by STOP. -1 = not captured (don't restore).
+    var snapMusicVol: Int get() = i("snapMusicVol", -1); set(v) = sp.edit().putInt("snapMusicVol", v).apply()
 
-    // ---- per-device volume on GO (Task 2) ----
-    var vol1: Int get() = i("vol1", 50); set(v) = sp.edit().putInt("vol1", v).apply()
-    var vol2: Int get() = i("vol2", 50); set(v) = sp.edit().putInt("vol2", v).apply()
-    var volOn1: Boolean get() = b("volOn1", false); set(v) = putB("volOn1", v)
-    var volOn2: Boolean get() = b("volOn2", false); set(v) = putB("volOn2", v)
+    // ---- start volume on GO (single group level; OnePlus shares one level in Audio sharing) ----
+    // Migrates the old per-device vol1 into the single vol on first read. Default 40%, on.
+    var vol: Int get() = i("vol", i("vol1", 40)); set(v) = sp.edit().putInt("vol", v).apply()
+    var volOn: Boolean get() = b("volOn", true); set(v) = putB("volOn", v)
 
     // ---- optional network setup on GO (Task 4) ----
     var hotspot: Boolean get() = b("hotspot", false); set(v) = putB("hotspot", v)
