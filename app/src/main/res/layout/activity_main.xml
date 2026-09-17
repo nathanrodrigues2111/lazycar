@@ -34,7 +34,7 @@
                         android:id="@+id/brandIcon"
                         android:layout_width="32dp"
                         android:layout_height="32dp"
-                        android:src="@drawable/ic_car" />
+                        android:src="@drawable/ic_car_glyph" />
                 </LinearLayout>
                 <LinearLayout
                     android:layout_width="wrap_content"

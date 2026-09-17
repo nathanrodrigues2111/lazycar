@@ -56,7 +56,7 @@ object BtDevices {
     private fun iconFor(d: BluetoothDevice): Int {
         val dc = try { d.bluetoothClass?.deviceClass } catch (e: SecurityException) { null }
         return when (dc) {
-            BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO -> R.drawable.ic_car
+            BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO -> R.drawable.ic_car_glyph
             BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET,
             BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES,
             BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE -> R.drawable.ic_headphones

@@ -27,7 +27,7 @@ class GoWidget : AppWidgetProvider() {
             else -> Accent.color(ctx)
         }
         val pill = android.content.res.ColorStateList.valueOf(pillColor)
-        val glyph = if (st == GoAction.ON) R.drawable.ic_stop_white else R.drawable.ic_car
+        val glyph = if (st == GoAction.ON) R.drawable.ic_stop_white else R.drawable.ic_car_glyph
         val desc = when (st) {
             GoAction.ON -> "LazyCar STOP"; GoAction.STARTING -> "LazyCar starting"
             GoAction.STOPPING -> "LazyCar stopping"; else -> "LazyCar GO"

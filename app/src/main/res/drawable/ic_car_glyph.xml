@@ -1,5 +1,6 @@
-<!-- Kept only because GoService.kt (out of UI scope) references it for the notification
-     small icon; redefined to the canonical glyph so every car mark matches. -->
+<!-- Single canonical LazyCar glyph: clean side-view car, viewport 24, white fill.
+     Referenced by the launcher foreground/monochrome, the widget glyph and the header logo.
+     Tint it in code where a coloured glyph is needed. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp"
     android:viewportWidth="24" android:viewportHeight="24">
