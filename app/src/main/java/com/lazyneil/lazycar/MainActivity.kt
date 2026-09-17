@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var p: Prefs
     private var amoledApplied = false
+    private var accentApplied = 0
     private var players = listOf<Triple<String, String, Drawable?>>()   // pkg,label,icon
     private var audioDevices = listOf<Triple<String, String, Int>>()    // mac,name,iconRes
 
@@ -47,6 +48,7 @@ class MainActivity : AppCompatActivity() {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         p = Prefs(this)
         amoledApplied = p.amoled
+        accentApplied = p.accent
         if (p.amoled) theme.applyStyle(R.style.ThemeOverlay_LazyCar_Amoled, true)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -74,6 +76,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.settingsBtn).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        findViewById<ImageButton>(R.id.helpBtn).setOnClickListener {
+            startActivity(Intent(this, HelpActivity::class.java))
+        }
 
         buildPlayers()
         buildOutputs()
@@ -88,7 +93,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (p.amoled != amoledApplied) { recreate(); return }   // AMOLED toggled in Settings
+        if (p.amoled != amoledApplied || p.accent != accentApplied) { recreate(); return }   // AMOLED/accent changed in Settings
         refreshSetup()
         buildOutputs()                       // reflect dual-audio + BT state changes made in Settings
         refreshGoButton()
@@ -110,8 +115,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshGoButton() {
         val btn = findViewById<MaterialButton>(R.id.goButton)
-        val accent = ContextCompat.getColor(this, R.color.accent)
-        val onAccent = ContextCompat.getColor(this, R.color.onAccent)
+        val accent = Accent.color(this)
+        val onAccent = Accent.onColor(accent)
         val error = ContextCompat.getColor(this, R.color.errorRed)
         val busy = ContextCompat.getColor(this, R.color.stateBusy)
         val secondary = ContextCompat.getColor(this, R.color.secondaryText)
@@ -286,13 +291,19 @@ class MainActivity : AppCompatActivity() {
     private fun wireVol(btnId: Int, sliderId: Int, getOn: () -> Boolean, setOn: (Boolean) -> Unit,
                         getVol: () -> Int, setVol: (Int) -> Unit) {
         val slider = findViewById<Slider>(sliderId)
+        val accentTint = android.content.res.ColorStateList.valueOf(Accent.color(this))
+        slider.trackActiveTintList = accentTint
+        slider.thumbTintList = accentTint
         slider.value = getVol().coerceIn(0, 100).toFloat()
         slider.visibility = if (getOn()) View.VISIBLE else View.GONE
         slider.clearOnChangeListeners()
         slider.addOnChangeListener { _, value, _ -> setVol(value.toInt()) }
-        findViewById<MaterialButton>(btnId).setOnClickListener {
-            val on = !getOn(); setOn(on)
-            slider.visibility = if (on) View.VISIBLE else View.GONE
+        findViewById<MaterialButton>(btnId).apply {
+            setTextColor(Accent.color(this@MainActivity))
+            setOnClickListener {
+                val on = !getOn(); setOn(on)
+                slider.visibility = if (on) View.VISIBLE else View.GONE
+            }
         }
     }
 

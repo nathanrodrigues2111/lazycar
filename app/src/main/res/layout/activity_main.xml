@@ -24,17 +24,34 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginBottom="4dp">
-                <ImageButton
-                    android:id="@+id/settingsBtn"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
                     android:layout_gravity="end|center_vertical"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Settings"
-                    android:padding="10dp"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/ic_settings"
-                    app:tint="@color/white" />
+                    android:orientation="horizontal">
+                    <ImageButton
+                        android:id="@+id/helpBtn"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_gravity="center_vertical"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Help"
+                        android:padding="10dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_help"
+                        app:tint="@color/white" />
+                    <ImageButton
+                        android:id="@+id/settingsBtn"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_gravity="center_vertical"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Settings"
+                        android:padding="10dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_settings"
+                        app:tint="@color/white" />
+                </LinearLayout>
             </FrameLayout>
 
             <!-- First-run setup card (accent left border) -->

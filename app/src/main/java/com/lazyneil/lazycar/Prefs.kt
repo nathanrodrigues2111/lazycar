@@ -51,4 +51,6 @@ class Prefs(ctx: Context) {
     // ---- optional network setup on GO (Task 4) ----
     var hotspot: Boolean get() = b("hotspot", false); set(v) = putB("hotspot", v)
     var mobileData: Boolean get() = b("mobileData", false); set(v) = putB("mobileData", v)
+    // Accent colour: ARGB, 0 = System (Material dynamic colour).
+    var accent: Int get() = i("accent", 0); set(v) = sp.edit().putInt("accent", v).apply()
 }

@@ -17,16 +17,18 @@ class GoWidget : AppWidgetProvider() {
             ctx, 0, Intent(ctx, GoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        // Lime pill with a black car glyph; the pill turns red once the sequence is ON.
-        val bg = if (st == GoAction.ON || st == GoAction.STOPPING) R.drawable.widget_bg_on
-                 else R.drawable.widget_bg
+        // Accent pill with a black car glyph; the pill turns red once the sequence is ON.
+        val on = st == GoAction.ON || st == GoAction.STOPPING
+        val pill = android.content.res.ColorStateList.valueOf(
+            if (on) 0xFFFF5252.toInt() else Accent.color(ctx))
         val desc = when (st) {
             GoAction.ON -> "LazyCar STOP"; GoAction.STARTING -> "LazyCar starting"
             GoAction.STOPPING -> "LazyCar stopping"; else -> "LazyCar GO"
         }
         for (id in ids) {
             val v = RemoteViews(ctx.packageName, R.layout.widget_go)
-            v.setInt(R.id.widget_button, "setBackgroundResource", bg)
+            v.setInt(R.id.widget_button, "setBackgroundResource", R.drawable.widget_bg)
+            v.setColorStateList(R.id.widget_button, "setBackgroundTintList", pill)
             v.setImageViewResource(R.id.widget_button, R.drawable.ic_car)
             v.setInt(R.id.widget_button, "setColorFilter", Color.BLACK)
             v.setContentDescription(R.id.widget_button, desc)
