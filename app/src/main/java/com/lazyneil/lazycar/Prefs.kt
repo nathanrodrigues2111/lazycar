@@ -23,6 +23,8 @@ class Prefs(ctx: Context) {
     var dualAudio: Boolean get() = b("dual", true); set(v) = putB("dual", v)
     var amoled: Boolean get() = b("amoled", true); set(v) = putB("amoled", v)
     var btOffOnStop: Boolean get() = b("btoff", false); set(v) = putB("btoff", v)
+    // True once both speakers are in the audio-sharing group; lets GO skip re-opening the switcher.
+    var grouped: Boolean get() = b("grouped", false); set(v) = putB("grouped", v)
     private fun i(k: String, def: Int) = sp.getInt(k, def)
     private fun l(k: String, def: Long) = sp.getLong(k, def)
     // GO state machine: 0 IDLE, 1 STARTING, 2 ON, 3 STOPPING. Writing state stamps the time.

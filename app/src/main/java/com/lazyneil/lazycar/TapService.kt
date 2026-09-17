@@ -1,6 +1,7 @@
 package com.lazyneil.lazycar
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -10,23 +11,26 @@ import android.widget.Toast
 import java.util.Collections
 
 /**
- * Zero-tap dual audio. Two independent jobs, each active only inside a short armed window:
- *  - buttons: click a system confirm button (the BT "Allow"/"Turn on" enable dialog).
- *  - adds: in the OnePlus output switcher, click every "Add device to group." checkbox so all
- *    connected speakers join the sharing group, then dismiss. No device-name matching.
- * No privileged permission is needed.
+ * Zero-tap dual audio. Two jobs:
+ *  - buttons: click a system confirm button (the BT "Allow"/"Turn on" enable dialog). Event-driven.
+ *  - adds: in the OnePlus output switcher, tick every "Add device to group." checkbox so all
+ *    connected speakers join the sharing group, then dismiss. POLLING, not event-driven: the OnePlus
+ *    dialog throttles/mislabels its accessibility events, so instead of waiting for the right event
+ *    we scan getWindows() every 400ms while armed and click what we find. No privileged permission.
  */
 class TapService : AccessibilityService() {
     companion object {
+        @Volatile private var instance: TapService? = null
+
         // ---- add-to-group mode (output switcher) ----
         @Volatile var armedUntil: Long = 0L
         @Volatile var ownsPanel: Boolean = false     // true only when LazyCar opened the panel
         @Volatile var finishing: Boolean = false
         private val clicked = Collections.synchronizedSet(mutableSetOf<String>())
-        @Volatile private var dumped = false
-        fun arm(windowMs: Long = 10000L) {
+        fun arm(windowMs: Long = 8500L) {
             armedUntil = SystemClock.uptimeMillis() + windowMs
-            ownsPanel = true; finishing = false; dumped = false; clicked.clear()
+            ownsPanel = true; finishing = false; clicked.clear()
+            instance?.startAddsPoll()
         }
         fun disarm() { armedUntil = 0L; ownsPanel = false }
 
@@ -41,13 +45,17 @@ class TapService : AccessibilityService() {
     }
 
     private val h = Handler(Looper.getMainLooper())
+    private var pollN = 0
+    private var dialogSeen = false
+    private var reSent = false
+
+    override fun onServiceConnected() { instance = this }
+    override fun onDestroy() { if (instance === this) instance = null; super.onDestroy() }
+    override fun onInterrupt() {}
 
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {
-        handleButtons(e)
-        handleAdds(e)
+        handleButtons(e)   // adds are handled by the poll loop, not events
     }
-
-    override fun onInterrupt() {}
 
     /** Click a system confirm button (BT enable dialog etc.) once, then disarm. */
     private fun handleButtons(e: AccessibilityEvent?) {
@@ -66,29 +74,56 @@ class TapService : AccessibilityService() {
         disarmButtons()
     }
 
-    /** In the output switcher, click each "Add device to group." checkbox once, then dismiss. */
-    private fun handleAdds(e: AccessibilityEvent?) {
-        if (armedUntil == 0L || finishing) return
-        if (SystemClock.uptimeMillis() >= armedUntil) { disarm(); return }
-        if (e?.packageName != "com.android.systemui") return
-        val root = rootInActiveWindow ?: return
-        if (!dumped) { dumped = true; dump(root, 0) }
+    // ---- polling add-to-group ----
 
-        val add = find(root) { n ->
-            n.isClickable && n.viewIdResourceName?.endsWith("/check_box_area") == true &&
-                n.contentDescription?.toString()?.trim().equals("Add device to group.", true) &&
-                (rowTitle(n)?.let { it !in clicked } ?: true)
+    fun startAddsPoll() {
+        pollN = 0; dialogSeen = false; reSent = false
+        h.removeCallbacks(pollRunnable)
+        h.post(pollRunnable)
+    }
+
+    private val pollRunnable = object : Runnable {
+        override fun run() {
+            if (armedUntil == 0L || finishing) return
+            if (SystemClock.uptimeMillis() >= armedUntil) { finishPoll(); return }
+            pollN++
+            var winCount = 0; var adds = 0; var removes = 0; var sawDialog = false
+            for (w in (windows ?: emptyList())) {
+                val root = w.root ?: continue
+                winCount++
+                if (root.packageName != "com.android.systemui") continue
+                forEach(root) { n ->
+                    if (n.viewIdResourceName?.endsWith("/check_box_area") != true) return@forEach
+                    val d = n.contentDescription?.toString()?.trim() ?: return@forEach
+                    if (d.equals("Add device to group.", true)) {
+                        sawDialog = true; adds++
+                        val title = rowTitle(n) ?: n.hashCode().toString()
+                        if (title !in clicked) {
+                            val target = if (n.isClickable) n else clickableAncestor(n) ?: n
+                            val ok = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            clicked.add(title)
+                            android.util.Log.e("LazyCar", "TapService poll#$pollN click add '$title' ok=$ok")
+                        }
+                    } else if (d.equals("Remove device from group.", true)) { sawDialog = true; removes++ }
+                }
+            }
+            if (sawDialog) dialogSeen = true
+            android.util.Log.e("LazyCar", "TapService poll#$pollN windows=$winCount add=$adds remove=$removes clicked=${clicked.size}")
+
+            // Dialog never showed up -> re-open it once (~1.6s in).
+            if (!dialogSeen && pollN >= 4 && !reSent) { reSent = true; reopenSwitcher() }
+
+            // Done when everything connected is grouped: no Add rows left and both speakers removable.
+            if (dialogSeen && adds == 0 && removes >= 2) { finishPoll(); return }
+            h.postDelayed(this, 400)
         }
-        if (add != null) {
-            val title = rowTitle(add) ?: add.hashCode().toString()
-            val ok = add.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            clicked.add(title)
-            android.util.Log.e("LazyCar", "TapService added group row '$title' ok=$ok")
-            return                                   // panel re-renders; next event handles the rest
-        }
-        // No more addable rows -> done. Dismiss only if we opened the panel.
+    }
+
+    private fun finishPoll() {
+        if (finishing) return
         finishing = true
-        android.util.Log.e("LazyCar", "TapService: no more 'Add device to group' rows (added ${clicked.size})")
+        Prefs(applicationContext).grouped = clicked.isNotEmpty() || dialogSeen
+        android.util.Log.e("LazyCar", "TapService poll done (clicked=${clicked.size}, grouped=${Prefs(applicationContext).grouped})")
         val owned = ownsPanel
         disarm()
         h.postDelayed({
@@ -97,12 +132,33 @@ class TapService : AccessibilityService() {
         }, 800)
     }
 
+    private fun reopenSwitcher() {
+        val pkg = Prefs(applicationContext).playerPkg
+        android.util.Log.e("LazyCar", "TapService re-sending output dialog for $pkg")
+        try {
+            sendBroadcast(Intent("com.android.systemui.action.LAUNCH_MEDIA_OUTPUT_DIALOG")
+                .setPackage("com.android.systemui").putExtra("package_name", pkg))
+        } catch (e: Exception) { android.util.Log.e("LazyCar", "re-send failed ${e.message}") }
+    }
+
     /** Title text of the device row (id .../main_content) that contains node [n]. */
     private fun rowTitle(n: AccessibilityNodeInfo): String? {
         var row: AccessibilityNodeInfo? = n
         while (row != null && row.viewIdResourceName?.endsWith("/main_content") != true) row = row.parent
         val r = row ?: return null
         return find(r) { it.viewIdResourceName?.endsWith("/title") == true }?.text?.toString()
+    }
+
+    private fun clickableAncestor(n: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var p = n.parent
+        while (p != null) { if (p.isClickable) return p; p = p.parent }
+        return null
+    }
+
+    private fun forEach(n: AccessibilityNodeInfo?, action: (AccessibilityNodeInfo) -> Unit) {
+        if (n == null) return
+        action(n)
+        for (i in 0 until n.childCount) forEach(n.getChild(i), action)
     }
 
     private fun find(n: AccessibilityNodeInfo?, pred: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {

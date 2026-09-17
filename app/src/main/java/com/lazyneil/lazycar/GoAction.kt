@@ -42,7 +42,8 @@ object GoAction {
     }
 
     fun sequenceDuration(p: Prefs): Long {
-        val shareEnd = if (p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()) 3000L + 6500L else 0L
+        // Keep the foreground service alive through the whole share poll (arm window 8.5s + dismiss).
+        val shareEnd = if (p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()) 3000L + 9500L else 0L
         return maxOf(5000L, shareEnd) + 1500L
     }
 
@@ -62,7 +63,11 @@ object GoAction {
         return sequenceDuration(p)
     }
 
-    /** Idempotent: connect only what's disconnected, launch/play only if music isn't already active. */
+    /**
+     * Idempotent: connect only what's disconnected, launch/play only if music isn't already active,
+     * open the sharing switcher only if the speakers aren't already grouped. Transitions to ON right
+     * after the last scheduled step, so a fully-satisfied GO (nothing to do) finishes in ~0.3s.
+     */
     fun runSequence(ctx: Context, p: Prefs) {
         val t0 = SystemClock.uptimeMillis()
         a2dpConnectedDevices(ctx) { connected ->
@@ -73,22 +78,32 @@ object GoAction {
             if (need1) connectA2dp(ctx, p.mac1) else if (p.mac1.isNotEmpty()) log("skipped connect ${p.mac1} (connected)")
             if (need2) main.postDelayed({ connectA2dp(ctx, p.mac2) }, 400) else if (p.mac2.isNotEmpty()) log("skipped connect ${p.mac2} (connected)")
             if (need3) main.postDelayed({ connectA2dp(ctx, p.mac3) }, 800)
+            if (need1 || need2) p.grouped = false   // a fresh connection drops any prior sharing group
 
             val settle = if (need1 || need2) 2000L else 0L
             val musicActive = (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive
+            var doneAt = 0L
+            if (need2) doneAt = 400L; if (need3) doneAt = 800L
 
             if (musicActive) log("skipped player launch (music active)")
-            else main.postDelayed({ launchPlayer(ctx, p.playerPkg) }, settle)
+            else { main.postDelayed({ launchPlayer(ctx, p.playerPkg) }, settle); doneAt = maxOf(doneAt, settle) }
 
             val shareAt = settle + (if (musicActive) 0L else 1000L)
-            if (p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty())
-                main.postDelayed({ shareAudio(ctx, p.mac1, p.mac2, p.playerPkg) }, shareAt)
+            val wantShare = p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()
+            val alreadyGrouped = p.grouped && !need1 && !need2
+            when {
+                wantShare && !alreadyGrouped -> {
+                    main.postDelayed({ shareAudio(ctx, p.mac1, p.mac2, p.playerPkg) }, shareAt)
+                    doneAt = maxOf(doneAt, shareAt + 9500L)   // poll's 8.5s window + dismiss
+                }
+                alreadyGrouped -> log("skipped share (already grouped)")
+            }
 
             if (musicActive) log("skipped MEDIA_PLAY (music active)")
-            else main.postDelayed({ playMedia(ctx) }, shareAt + 1500)
+            else { main.postDelayed({ playMedia(ctx) }, shareAt + 1500); doneAt = maxOf(doneAt, shareAt + 1500) }
 
-            if (p.headunit) main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, shareAt + 2000)
-            main.postDelayed({ if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0) } }, sequenceDuration(p))
+            if (p.headunit) { main.postDelayed({ launchHeadunit(ctx, p.headunitIp) }, shareAt + 2000); doneAt = maxOf(doneAt, shareAt + 2000) }
+            main.postDelayed({ if (p.state == STARTING) { setState(ctx, p, ON); step("GO sequence", t0) } }, doneAt + 300L)
         }
     }
 
@@ -137,16 +152,9 @@ object GoAction {
      */
     fun shareAudio(ctx: Context, mac1: String, mac2: String, playerPkg: String) {
         try {
-            TapService.arm()                    // TapService ticks every "Add device to group." row
-            log("shareAudio: armed, opening output switcher")
-            openOutputSwitcher(ctx, playerPkg)
-            main.postDelayed({
-                if (TapService.armedUntil != 0L && !TapService.finishing) {
-                    TapService.disarm()
-                    log("shareAudio: auto-tap timeout; leaving switcher open")
-                    toast(ctx, "Tap second speaker to share")
-                }
-            }, 6000)
+            TapService.arm()                    // starts the poll that ticks every "Add device to group." row
+            log("shareAudio: armed poll, opening output switcher")
+            openOutputSwitcher(ctx, playerPkg)  // the poll re-opens it if it doesn't appear
         } catch (e: Exception) {
             log("shareAudio failed ${e.message}"); openOutputSwitcher(ctx, playerPkg)
         }
@@ -236,6 +244,7 @@ object GoAction {
     fun stop(ctx: Context): Long {
         val p = Prefs(ctx)
         setState(ctx, p, STOPPING)
+        p.grouped = false
         pauseMedia(ctx)
         listOf(p.mac1, p.mac2, p.mac3).filter { it.isNotEmpty() }.forEach { disconnectA2dp(ctx, it) }
         if (p.btOffOnStop) {
