@@ -108,7 +108,7 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             icon.setImageResource(R.drawable.ic_error_outline)
             icon.setColorFilter(getColor(R.color.errorRed))
-            text.text = "Auto-tap off — tap to set up"
+            text.text = "Auto-tap off. Tap to set up"
             row.isClickable = true
             row.setOnClickListener { openAccessibilitySettings() }
         }
