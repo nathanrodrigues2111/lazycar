@@ -32,12 +32,23 @@ class Prefs(ctx: Context) {
         set(v) = sp.edit().putInt("state", v).putLong("stateTs", System.currentTimeMillis()).apply()
     val stateTs: Long get() = l("stateTs", 0L)
 
-    // UI-added keys (per-output volume + connectivity toggles).
-    private fun putI(k: String, v: Int) = sp.edit().putInt(k, v).apply()
-    var vol1: Int get() = i("vol1", 50); set(v) = putI("vol1", v)
-    var vol2: Int get() = i("vol2", 50); set(v) = putI("vol2", v)
+    // ---- GO-time snapshot, restored by STOP (replaces the old "BT off on stop" switch).
+    //      Defaults are "was on/connected" so a STOP with no prior GO tears nothing down. ----
+    var snapBtWasOn: Boolean get() = b("snapBt", true); set(v) = putB("snapBt", v)
+    var snapMusicWasActive: Boolean get() = b("snapMusic", true); set(v) = putB("snapMusic", v)
+    var snapConn1: Boolean get() = b("snapC1", true); set(v) = putB("snapC1", v)
+    var snapConn2: Boolean get() = b("snapC2", true); set(v) = putB("snapC2", v)
+    var snapConn3: Boolean get() = b("snapC3", true); set(v) = putB("snapC3", v)
+    var snapDataWasOn: Boolean get() = b("snapData", true); set(v) = putB("snapData", v)
+    var snapHotspotWasOn: Boolean get() = b("snapHotspot", true); set(v) = putB("snapHotspot", v)
+
+    // ---- per-device volume on GO (Task 2) ----
+    var vol1: Int get() = i("vol1", 50); set(v) = sp.edit().putInt("vol1", v).apply()
+    var vol2: Int get() = i("vol2", 50); set(v) = sp.edit().putInt("vol2", v).apply()
     var volOn1: Boolean get() = b("volOn1", false); set(v) = putB("volOn1", v)
     var volOn2: Boolean get() = b("volOn2", false); set(v) = putB("volOn2", v)
+
+    // ---- optional network setup on GO (Task 4) ----
     var hotspot: Boolean get() = b("hotspot", false); set(v) = putB("hotspot", v)
     var mobileData: Boolean get() = b("mobileData", false); set(v) = putB("mobileData", v)
 }
