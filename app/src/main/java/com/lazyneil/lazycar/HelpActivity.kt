@@ -22,21 +22,21 @@ class HelpActivity : AppCompatActivity() {
 
     private val qa = listOf(
         "What does GO do?" to
-            "GO turns on Bluetooth, connects your chosen outputs, turns on the hotspot and mobile data if you enabled them, opens your music player, ticks both outputs in Audio sharing, and presses play. all from one tap.",
+            "GO turns on Bluetooth, connects your chosen outputs, turns on the hotspot and mobile data if you enabled them, opens your music player, ticks both outputs in Audio sharing, and presses play, all from one tap.",
         "What does STOP do?" to
             "STOP restores exactly what was on before you tapped GO. Anything already on stays on; only what GO switched on gets turned back off.",
         "How do I set it up the first time?" to
             "1. Pair your outputs in Android's Bluetooth settings.\n2. Enable OnePlus Audio sharing once in Bluetooth settings.\n3. Turn on LazyCar in Accessibility (button below).\n4. Add the LazyCar widget to your home screen.",
         "Why does LazyCar need Accessibility?" to
-            "Android hides dual-audio and hotspot controls from apps. LazyCar uses Accessibility only to tap the system panel for you. nothing else, and no data is collected.",
+            "Android hides dual-audio and hotspot controls from apps. LazyCar uses Accessibility only to tap the system panel for you, nothing else, and no data is collected.",
         "Only one output gets ticked?" to
             "That usually means OnePlus Audio sharing isn't enabled. Open Bluetooth settings, turn Audio sharing on, then try GO again.",
         "Widget tap does nothing?" to
-            "Check that LazyCar is still enabled in Accessibility. a system update can switch it off. Re-enable it and the widget works again.",
+            "Check that LazyCar is still enabled in Accessibility, because a system update can switch it off. Re-enable it and the widget works again.",
         "Bluetooth prompt keeps showing?" to
             "Android asks permission to turn Bluetooth on. Tap Allow once and LazyCar can turn it on for you from then on.",
         "Can I use headphones or car stereo instead of speakers?" to
-            "Yes. Any paired Bluetooth audio device. headphones, earbuds or a car stereo. can be picked as an output.",
+            "Yes. Any paired Bluetooth audio device works: headphones, earbuds or a car stereo can be picked as an output.",
         "Does LazyCar send any data?" to
             "No. LazyCar sends no data anywhere. Everything happens on your phone.",
         "How do I add the widget?" to
@@ -46,6 +46,7 @@ class HelpActivity : AppCompatActivity() {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Accent.apply(this)
         if (Prefs(this).amoled) theme.applyStyle(R.style.ThemeOverlay_LazyCar_Amoled, true)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
