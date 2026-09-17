@@ -79,6 +79,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.helpBtn).setOnClickListener {
             startActivity(Intent(this, HelpActivity::class.java))
         }
+        findViewById<ImageView>(R.id.brandIcon).setColorFilter(Accent.color(this))
 
         buildPlayers()
         buildOutputs()
