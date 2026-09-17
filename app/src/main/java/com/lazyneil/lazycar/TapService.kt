@@ -48,6 +48,8 @@ class TapService : AccessibilityService() {
     private var pollN = 0
     private var dialogSeen = false
     private var reSent = false
+    private val volSet = Collections.synchronizedSet(mutableSetOf<String>())
+    private val volTries = Collections.synchronizedMap(mutableMapOf<String, Int>())
 
     override fun onServiceConnected() { instance = this }
     override fun onDestroy() { if (instance === this) instance = null; super.onDestroy() }
@@ -77,7 +79,7 @@ class TapService : AccessibilityService() {
     // ---- polling add-to-group ----
 
     fun startAddsPoll() {
-        pollN = 0; dialogSeen = false; reSent = false
+        pollN = 0; dialogSeen = false; reSent = false; volSet.clear(); volTries.clear()
         h.removeCallbacks(pollRunnable)
         h.post(pollRunnable)
     }
@@ -87,11 +89,13 @@ class TapService : AccessibilityService() {
             if (armedUntil == 0L || finishing) return
             if (SystemClock.uptimeMillis() >= armedUntil) { finishPoll(); return }
             pollN++
+            val prefs = Prefs(applicationContext)
             var winCount = 0; var adds = 0; var removes = 0; var sawDialog = false
             for (w in (windows ?: emptyList())) {
                 val root = w.root ?: continue
                 winCount++
                 if (root.packageName != "com.android.systemui") continue
+                applyVolumes(root, prefs)
                 forEach(root) { n ->
                     if (n.viewIdResourceName?.endsWith("/check_box_area") != true) return@forEach
                     val d = n.contentDescription?.toString()?.trim() ?: return@forEach
@@ -113,8 +117,11 @@ class TapService : AccessibilityService() {
             // Dialog never showed up -> re-open it once (~1.6s in).
             if (!dialogSeen && pollN >= 4 && !reSent) { reSent = true; reopenSwitcher() }
 
-            // Done when everything connected is grouped: no Add rows left and both speakers removable.
-            if (dialogSeen && adds == 0 && removes >= 2) { finishPoll(); return }
+            // Done when everything connected is grouped (no Add rows, >=2 Remove) AND every
+            // "set volume on GO" slider has been applied. Window timeout is the fallback.
+            val volDone = listOf(prefs.name1 to prefs.volOn1, prefs.name2 to prefs.volOn2)
+                .none { it.first.isNotEmpty() && it.second && it.first !in volSet }
+            if (dialogSeen && adds == 0 && removes >= 2 && volDone) { finishPoll(); return }
             h.postDelayed(this, 400)
         }
     }
@@ -130,6 +137,40 @@ class TapService : AccessibilityService() {
             if (owned) performGlobalAction(GLOBAL_ACTION_BACK)
             if (clicked.isNotEmpty()) Toast.makeText(applicationContext, "Dual audio on", Toast.LENGTH_LONG).show()
         }, 800)
+    }
+
+    /**
+     * Set each speaker's slider to its saved level (Prefs.volN) when "Set volume on GO" (volOnN) is
+     * on and the row title matches the speaker name. Uses ACTION_SET_PROGRESS on the row's AbsSeekBar
+     * (any node exposing a RangeInfo), scaling 0-100 into the slider's own [min,max]. Once per row.
+     */
+    private fun applyVolumes(root: AccessibilityNodeInfo, p: Prefs) {
+        val targets = listOf(p.name1 to (p.volOn1 to p.vol1), p.name2 to (p.volOn2 to p.vol2))
+            .filter { it.first.isNotEmpty() && it.second.first }
+        if (targets.isEmpty()) return
+        forEach(root) { n ->
+            val range = n.rangeInfo ?: return@forEach
+            val title = rowTitle(n) ?: descName(n) ?: return@forEach
+            val t = targets.firstOrNull { it.first.equals(title, true) } ?: return@forEach
+            if (title in volSet) return@forEach
+            val pct = t.second.second.coerceIn(0, 100)
+            val value = range.min + (range.max - range.min) * pct / 100f
+            val b = android.os.Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, value) }
+            val ok = n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, b)
+            android.util.Log.e("LazyCar", "TapService set volume '$title' -> $pct% (=$value in ${range.min}..${range.max}) ok=$ok")
+            if (ok) { volSet.add(title); return@forEach }
+            // Retry on later polls (slider may not be ready), but give up after a few tries: a
+            // sharing-group secondary member's slider rejects SET_PROGRESS on this ROM.
+            val tries = (volTries[title] ?: 0) + 1; volTries[title] = tries
+            if (tries >= 3) { volSet.add(title); android.util.Log.e("LazyCar", "TapService giving up volume '$title' (slider not settable)") }
+        }
+    }
+
+    /** Pull "NAME" out of a "Connected to NAME." style contentDescription. */
+    private fun descName(n: AccessibilityNodeInfo): String? {
+        val d = n.contentDescription?.toString()?.trim() ?: return null
+        val m = Regex("(?:Connected to|Playing on|In use.*?) ?(.+?)\\.?$").find(d) ?: return null
+        return m.groupValues.getOrNull(1)?.trim()?.ifEmpty { null }
     }
 
     private fun reopenSwitcher() {
