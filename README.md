@@ -10,7 +10,6 @@ exactly as it was.
 
 <p align="center">
   <img src="shots/main.png" width="200" alt="Main screen">
-  <img src="shots/widget_on.png" width="200" alt="Widget">
   <img src="shots/app_starting.png" width="200" alt="Starting">
 </p>
 <p align="center">
