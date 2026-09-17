@@ -54,6 +54,8 @@ object GoAction {
         val adapter = (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
             ?: BluetoothAdapter.getDefaultAdapter()
         val state = try { adapter?.state ?: BluetoothAdapter.STATE_OFF } catch (e: Exception) { BluetoothAdapter.STATE_OFF }
+        p.snapBtWasOn = adapter != null && state == BluetoothAdapter.STATE_ON
+        log("snapshot: btWasOn=${p.snapBtWasOn}")
         if (adapter != null && state != BluetoothAdapter.STATE_ON) {
             enableBtThenRun(ctx, adapter, p, prompt = state != BluetoothAdapter.STATE_TURNING_ON)
             return 12000L + 1500L + sequenceDuration(p)
@@ -82,6 +84,13 @@ object GoAction {
 
             val settle = if (need1 || need2) 2000L else 0L
             val musicActive = (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive
+            // Snapshot pre-GO state (connected = probe result before we connect anything) so STOP can
+            // restore exactly what it found: only undo what GO turned on.
+            p.snapConn1 = p.mac1.isNotEmpty() && p.mac1 in connected
+            p.snapConn2 = p.mac2.isNotEmpty() && p.mac2 in connected
+            p.snapConn3 = p.mac3.isNotEmpty() && p.mac3 in connected
+            p.snapMusicWasActive = musicActive
+            log("snapshot: music=$musicActive conn1=${p.snapConn1} conn2=${p.snapConn2} conn3=${p.snapConn3}")
             var doneAt = 0L
             if (need2) doneAt = 400L; if (need3) doneAt = 800L
 
@@ -140,7 +149,7 @@ object GoAction {
             if (!started.get()) {
                 try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}
                 TapService.disarmButtons(); setState(ctx, p, IDLE)
-                log("BT enable timeout"); toast(ctx, "Bluetooth still off")
+                log("BT enable timeout")
             }
         }, 12000)
     }
@@ -240,22 +249,60 @@ object GoAction {
         } catch (e: Exception) { done(emptyList()) }
     }
 
-    /** Undo GO: pause, disconnect speakers, optionally BT off, kill player. Returns ms to stay alive. */
+    /**
+     * Undo GO by restoring the pre-GO snapshot: only turn off / disconnect / pause what GO itself
+     * turned on. Anything that was already on before GO is left exactly as it was. Returns ms alive.
+     */
     fun stop(ctx: Context): Long {
         val p = Prefs(ctx)
         setState(ctx, p, STOPPING)
         p.grouped = false
-        pauseMedia(ctx)
-        listOf(p.mac1, p.mac2, p.mac3).filter { it.isNotEmpty() }.forEach { disconnectA2dp(ctx, it) }
-        if (p.btOffOnStop) {
-            val a = adapterOf(ctx)
-            try { @Suppress("DEPRECATION") a?.disable() } catch (e: Exception) {}
-            main.postDelayed({ if (a?.isEnabled == true) toast(ctx, "Bluetooth stays on (Android limit)") }, 1500)
-        }
-        try { (ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
+
+        if (!p.snapMusicWasActive) { log("restore: music playing -> paused"); pauseMedia(ctx) }
+        else log("restore: music was already playing -> left")
+
+        for ((mac, wasConnected) in listOf(p.mac1 to p.snapConn1, p.mac2 to p.snapConn2, p.mac3 to p.snapConn3))
+            if (mac.isNotEmpty() && !wasConnected) { log("restore: $mac connected -> disconnected"); disconnectA2dp(ctx, mac) }
+            else if (mac.isNotEmpty()) log("restore: $mac was already connected -> left")
+
+        if (!p.snapBtWasOn) { log("restore: bt on -> off"); disableBt(ctx) }
+        else log("restore: bt was already on -> left")
+
+        // Only kill the player if GO launched it (music wasn't already playing before GO).
+        if (!p.snapMusicWasActive) try { (ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
             .killBackgroundProcesses(p.playerPkg) } catch (e: Exception) {}
         main.postDelayed({ setState(ctx, p, IDLE) }, 1800)
-        return 2500L
+        return if (!p.snapBtWasOn) 13000L else 2500L
+    }
+
+    /**
+     * Turn BT off the same way we turn it on: try the silent disable, then pop the system
+     * REQUEST_DISABLE dialog and let TapService confirm it (com.oplus.wirelesssettings). Waits for
+     * STATE_OFF; on timeout it only logs. No toasts — either it happens or it's in the log.
+     */
+    private fun disableBt(ctx: Context) {
+        val adapter = adapterOf(ctx) ?: return
+        val done = AtomicBoolean(false)
+        val recv = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                if (i.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_OFF && done.compareAndSet(false, true)) {
+                    try { ctx.unregisterReceiver(this) } catch (e: Exception) {}
+                    TapService.disarmButtons(); log("BT off")
+                }
+            }
+        }
+        ctx.registerReceiver(recv, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+        try { @Suppress("DEPRECATION") adapter.disable() } catch (e: Exception) { log("adapter.disable() ${e.message}") }
+        TapService.armButtons(listOf("Allow", "Turn off", "Turn Off", "OK", "Disable"))
+        // ACTION_REQUEST_DISABLE is not a public SDK constant; its action string is stable.
+        try { ctx.startActivity(Intent("android.bluetooth.adapter.action.REQUEST_DISABLE").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (e: Exception) { log("REQUEST_DISABLE ${e.message}") }
+        if (!adapter.isEnabled && done.compareAndSet(false, true)) {
+            try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}; TapService.disarmButtons()
+        }
+        main.postDelayed({
+            if (!done.get()) { try { ctx.unregisterReceiver(recv) } catch (e: Exception) {}; TapService.disarmButtons(); log("BT disable timeout") }
+        }, 12000)
     }
 
     /** Best-effort real-state probe on app open: ON iff both speakers are A2DP-connected. */
