@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@android:color/transparent"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationIconTint="@color/white"
+        app:title="Settings"
+        app:titleTextColor="@color/white" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="24dp">
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/CardBox"
+                android:layout_marginBottom="12dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <!-- Dual audio -->
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/dualSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:text="Dual audio"
+                        android:textColor="@color/white"
+                        android:textSize="17sp" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Auto-ticks both outputs in Audio sharing"
+                        android:textColor="@color/secondaryText"
+                        android:textSize="13sp" />
+
+                    <!-- AMOLED -->
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/amoledSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:minHeight="48dp"
+                        android:text="AMOLED black"
+                        android:textColor="@color/white"
+                        android:textSize="17sp" />
+
+                    <!-- Car head unit -->
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/headunitSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:minHeight="48dp"
+                        android:text="Car head unit"
+                        android:textColor="@color/white"
+                        android:textSize="17sp" />
+                    <TextView
+                        android:id="@+id/headunitDetected"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/secondaryText"
+                        android:textSize="13sp" />
+                    <LinearLayout
+                        android:id="@+id/headunitExtra"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+                        <LinearLayout android:id="@+id/dev3Row" style="@style/Row56" android:layout_marginTop="4dp">
+                            <FrameLayout style="@style/IconCircle">
+                                <ImageView android:id="@+id/dev3Icon" style="@style/RowIcon" />
+                            </FrameLayout>
+                            <TextView android:id="@+id/dev3Value" style="@style/RowTitle" android:text="Head unit tablet" />
+                            <ImageView style="@style/ChevronIcon" />
+                        </LinearLayout>
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:hint="Head unit IP (optional)">
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/ipField"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="text" />
+                        </com.google.android.material.textfield.TextInputLayout>
+                    </LinearLayout>
+
+                    <!-- Wi-Fi hotspot -->
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/hotspotSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:minHeight="48dp"
+                        android:text="Wi-Fi hotspot"
+                        android:textColor="@color/white"
+                        android:textSize="17sp" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Turns on with GO, restored on STOP"
+                        android:textColor="@color/secondaryText"
+                        android:textSize="13sp" />
+                    <!-- Mobile data: indented sub-row, only while hotspot is on -->
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/mobileSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="24dp"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:text="Mobile data"
+                        android:textColor="@color/white"
+                        android:textSize="17sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Accessibility status -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/CardBox"
+                android:layout_marginBottom="12dp">
+                <LinearLayout android:id="@+id/a11yRow" style="@style/Row56" android:paddingHorizontal="16dp">
+                    <FrameLayout style="@style/IconCircle">
+                        <ImageView android:id="@+id/a11yIcon" style="@style/RowIcon" />
+                    </FrameLayout>
+                    <TextView android:id="@+id/a11yText" style="@style/RowTitle" android:text="Auto-tap ready" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView
+                android:id="@+id/versionText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:textColor="@color/secondaryText"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

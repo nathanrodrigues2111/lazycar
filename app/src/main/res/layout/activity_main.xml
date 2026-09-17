@@ -9,255 +9,220 @@
         android:id="@+id/scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:clipToPadding="false"
         android:fillViewport="true">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp"
-            android:paddingBottom="104dp">
+            android:paddingHorizontal="16dp"
+            android:paddingTop="8dp">
 
-        <!-- First-run setup card (hidden once everything is configured) -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/setupCard"
-            style="?attr/materialCardViewOutlinedStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="14dp"
-            android:visibility="gone"
-            app:cardCornerRadius="28dp">
-            <LinearLayout
+            <!-- Slim header: settings cog, top-right -->
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="14dp">
-                <TextView
-                    android:id="@+id/setupTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="⚠ Setup needed"
-                    android:textAppearance="?attr/textAppearanceTitleMedium" />
-                <TextView
-                    android:id="@+id/setupBody"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:textAppearance="?attr/textAppearanceBodyMedium" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/setupBtn"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="Open settings" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+                android:layout_height="48dp"
+                android:layout_marginBottom="4dp">
+                <ImageButton
+                    android:id="@+id/settingsBtn"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Settings"
+                    android:padding="10dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_settings"
+                    app:tint="@color/white" />
+            </FrameLayout>
 
-        <!-- Player card -->
-        <com.google.android.material.card.MaterialCardView
-            style="?attr/materialCardViewFilledStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="14dp"
-            app:cardCornerRadius="28dp">
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="14dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Player"
-                    android:textAppearance="?attr/textAppearanceTitleMedium" />
+            <!-- First-run setup card (accent left border) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/setupCard"
+                style="@style/CardBox"
+                android:layout_marginBottom="12dp"
+                android:visibility="gone">
                 <LinearLayout
-                    android:id="@+id/playerRow"
-                    style="@style/PickerRow">
-                    <ImageView
-                        android:id="@+id/playerIcon"
-                        android:layout_width="36dp"
-                        android:layout_height="36dp" />
-                    <TextView
-                        android:id="@+id/playerValue"
-                        style="@style/PickerValue"
-                        android:text="Choose a player" />
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/ic_chevron_right" />
-                </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Speakers card -->
-        <com.google.android.material.card.MaterialCardView
-            style="?attr/materialCardViewFilledStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="14dp"
-            app:cardCornerRadius="28dp">
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="14dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Speakers"
-                    android:textAppearance="?attr/textAppearanceTitleMedium" />
-                <TextView
-                    android:id="@+id/btNote"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:visibility="gone"
-                    android:textAppearance="?attr/textAppearanceBodySmall" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btEnable"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:visibility="gone"
-                    android:text="Turn on Bluetooth" />
-                <LinearLayout android:id="@+id/dev1Row" style="@style/PickerRow">
-                    <ImageView android:id="@+id/dev1Icon" android:layout_width="36dp" android:layout_height="36dp" />
-                    <TextView android:id="@+id/dev1Value" style="@style/PickerValue" android:text="Device 1" />
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/ic_chevron_right" />
-                </LinearLayout>
-                <LinearLayout android:id="@+id/dev2Row" style="@style/PickerRow">
-                    <ImageView android:id="@+id/dev2Icon" android:layout_width="36dp" android:layout_height="36dp" />
-                    <TextView android:id="@+id/dev2Value" style="@style/PickerValue" android:text="Device 2" />
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/ic_chevron_right" />
-                </LinearLayout>
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/dualSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="Dual audio (audio sharing)" />
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:paddingStart="8dp"
-                    android:text="Needs Accessibility (auto-taps second speaker)"
-                    android:textAppearance="?attr/textAppearanceBodySmall" />
-                <LinearLayout
-                    android:id="@+id/autoTapRow"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginTop="8dp"
-                    android:paddingHorizontal="8dp"
-                    android:minHeight="40dp"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true">
-                    <ImageView
-                        android:id="@+id/autoTapIcon"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp" />
-                    <TextView
-                        android:id="@+id/autoTapText"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="10dp"
-                        android:textAppearance="?attr/textAppearanceBodyMedium" />
-                </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Head unit card -->
-        <com.google.android.material.card.MaterialCardView
-            style="?attr/materialCardViewFilledStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="14dp"
-            app:cardCornerRadius="28dp">
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="14dp">
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/headunitSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Start car head unit"
-                    android:textAppearance="?attr/textAppearanceTitleMedium" />
-                <TextView
-                    android:id="@+id/headunitDetected"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:textAppearance="?attr/textAppearanceBodySmall" />
-                <LinearLayout android:id="@+id/dev3Row" style="@style/PickerRow">
-                    <ImageView android:id="@+id/dev3Icon" android:layout_width="36dp" android:layout_height="36dp" />
-                    <TextView android:id="@+id/dev3Value" style="@style/PickerValue" android:text="Head unit tablet (optional)" />
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:src="@drawable/ic_chevron_right" />
-                </LinearLayout>
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:hint="Head unit IP (optional)">
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/ipField"
+                    android:orientation="horizontal">
+                    <View
+                        android:layout_width="4dp"
+                        android:layout_height="match_parent"
+                        android:background="@color/accent" />
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="text" />
-                </com.google.android.material.textfield.TextInputLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+                        android:orientation="vertical"
+                        android:padding="16dp">
+                        <TextView
+                            android:id="@+id/setupTitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Setup needed"
+                            android:textColor="@color/white"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
+                        <TextView
+                            android:id="@+id/setupBody"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:lineSpacingExtra="4dp"
+                            android:textColor="@color/secondaryText"
+                            android:textSize="14sp" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/setupBtn"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="Open settings" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/amoledSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
-            android:paddingHorizontal="6dp"
-            android:text="AMOLED black" />
+            <!-- PLAYER -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/CardBox"
+                android:layout_marginBottom="12dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView style="@style/CardLabel" android:text="PLAYER" />
+                    <LinearLayout android:id="@+id/playerRow" style="@style/Row56" android:layout_marginTop="4dp">
+                        <FrameLayout style="@style/IconCircle">
+                            <ImageView android:id="@+id/playerIcon" style="@style/RowIcon" />
+                        </FrameLayout>
+                        <TextView android:id="@+id/playerValue" style="@style/RowTitle" android:text="Choose a player" />
+                        <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/btOffSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
-            android:paddingHorizontal="6dp"
-            android:text="Turn Bluetooth off on stop" />
+            <!-- OUTPUT -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/CardBox"
+                android:layout_marginBottom="12dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView style="@style/CardLabel" android:text="OUTPUT" />
 
-    </LinearLayout>
+                    <TextView
+                        android:id="@+id/btNote"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textColor="@color/secondaryText"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btEnable"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Turn on Bluetooth"
+                        android:visibility="gone" />
+
+                    <!-- Output 1 / single source -->
+                    <LinearLayout
+                        android:id="@+id/outBlock1"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+                        <LinearLayout android:id="@+id/out1Row" style="@style/Row56">
+                            <FrameLayout style="@style/IconCircle">
+                                <ImageView android:id="@+id/out1Icon" style="@style/RowIcon" />
+                            </FrameLayout>
+                            <TextView android:id="@+id/out1Value" style="@style/RowTitle" android:text="Output 1" />
+                            <ImageView style="@style/ChevronIcon" />
+                        </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/vol1Btn"
+                                style="@style/Widget.Material3.Button.TextButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:minWidth="0dp"
+                                android:text="Volume"
+                                android:textColor="@color/accent" />
+                            <com.google.android.material.slider.Slider
+                                android:id="@+id/vol1Slider"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:valueFrom="0"
+                                android:valueTo="100"
+                                android:stepSize="1"
+                                android:visibility="gone" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Output 2 (dual only) -->
+                    <LinearLayout
+                        android:id="@+id/outBlock2"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+                        <LinearLayout android:id="@+id/out2Row" style="@style/Row56">
+                            <FrameLayout style="@style/IconCircle">
+                                <ImageView android:id="@+id/out2Icon" style="@style/RowIcon" />
+                            </FrameLayout>
+                            <TextView android:id="@+id/out2Value" style="@style/RowTitle" android:text="Output 2" />
+                            <ImageView style="@style/ChevronIcon" />
+                        </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/vol2Btn"
+                                style="@style/Widget.Material3.Button.TextButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:minWidth="0dp"
+                                android:text="Volume"
+                                android:textColor="@color/accent" />
+                            <com.google.android.material.slider.Slider
+                                android:id="@+id/vol2Slider"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:valueFrom="0"
+                                android:valueTo="100"
+                                android:stepSize="1"
+                                android:visibility="gone" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
     </ScrollView>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/goButton"
         style="@style/Widget.Material3.Button"
         android:layout_width="match_parent"
-        android:layout_height="72dp"
+        android:layout_height="76dp"
         android:layout_gravity="bottom"
         android:layout_margin="16dp"
         android:text="GO"
-        android:textSize="20sp"
+        android:textColor="@color/onAccent"
+        android:textSize="22sp"
         android:textStyle="bold"
-        android:letterSpacing="0.05"
-        android:textColor="?attr/colorOnPrimary"
-        app:backgroundTint="?attr/colorPrimary"
-        app:cornerRadius="36dp"
-        app:icon="@drawable/ic_car_white"
-        app:iconSize="24dp"
-        app:iconGravity="textStart"
-        app:iconPadding="12dp"
-        app:iconTint="?attr/colorOnPrimary" />
+        app:backgroundTint="@color/accent"
+        app:cornerRadius="38dp" />
 </FrameLayout>

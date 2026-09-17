@@ -11,5 +11,5 @@
         android:contentDescription="LazyCar GO"
         android:padding="14dp"
         android:scaleType="fitCenter"
-        android:src="@drawable/ic_car_white" />
+        android:src="@drawable/ic_car" />
 </FrameLayout>

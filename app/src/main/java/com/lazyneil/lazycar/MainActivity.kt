@@ -2,22 +2,20 @@ package com.lazyneil.lazycar
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothClass
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.content.IntentFilter
-import android.content.BroadcastReceiver
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewGroup.MarginLayoutParams
 import android.widget.ArrayAdapter
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -30,42 +28,42 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.textfield.TextInputEditText
-
-private const val BT_ICON = android.R.drawable.stat_sys_data_bluetooth
+import com.google.android.material.slider.Slider
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var p: Prefs
-    private var goBg: ColorStateList? = null
-    private var goFg: Int = 0
+    private var amoledApplied = false
     private var players = listOf<Triple<String, String, Drawable?>>()   // pkg,label,icon
     private var audioDevices = listOf<Triple<String, String, Int>>()    // mac,name,iconRes
-    private var allDevices = listOf<Triple<String, String, Int>>()
 
     private var selPlayer = ""
     private var selMac1 = ""; private var selName1 = ""
     private var selMac2 = ""; private var selName2 = ""
-    private var selMac3 = ""; private var selName3 = ""
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-        DynamicColorsCompat(this)
         p = Prefs(this)
-        if (p.amoled) theme.applyStyle(R.style.ThemeOverlay_LazyCar_Amoled, true) // black surfaces, keep dynamic accents
+        amoledApplied = p.amoled
+        if (p.amoled) theme.applyStyle(R.style.ThemeOverlay_LazyCar_Amoled, true)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        findViewById<MaterialButton>(R.id.goButton).let { goBg = it.backgroundTintList; goFg = it.currentTextColor }
+
         selPlayer = p.playerPkg
         selMac1 = p.mac1; selName1 = p.name1
         selMac2 = p.mac2; selName2 = p.name2
-        selMac3 = p.mac3; selName3 = p.name3
 
+        val scroll = findViewById<View>(R.id.scroll)
+        val go = findViewById<MaterialButton>(R.id.goButton)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root)) { v, insets ->
             val b = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(v.paddingLeft, b.top, v.paddingRight, b.bottom)
+            v.setPadding(b.left, b.top, b.right, 0)
+            scroll.setPadding(scroll.paddingLeft, scroll.paddingTop, scroll.paddingRight, dp(108) + b.bottom)
+            (go.layoutParams as MarginLayoutParams).bottomMargin = dp(16) + b.bottom
+            go.requestLayout()
             insets
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
@@ -73,23 +71,14 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
         }
 
-        buildPlayers()
-        buildDevices()
-        buildHeadunit()
+        findViewById<ImageButton>(R.id.settingsBtn).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
 
-        findViewById<MaterialSwitch>(R.id.dualSwitch).apply {
-            isChecked = p.dualAudio
-            setOnCheckedChangeListener { _, on -> p.dualAudio = on }
-        }
-        findViewById<MaterialSwitch>(R.id.amoledSwitch).apply {
-            isChecked = p.amoled
-            setOnCheckedChangeListener { _, on -> if (on != p.amoled) { p.amoled = on; recreate() } }
-        }
-        findViewById<MaterialSwitch>(R.id.btOffSwitch).apply {
-            isChecked = p.btOffOnStop
-            setOnCheckedChangeListener { _, on -> p.btOffOnStop = on }
-        }
-        findViewById<MaterialButton>(R.id.goButton).setOnClickListener {
+        buildPlayers()
+        buildOutputs()
+
+        go.setOnClickListener {
             if (GoAction.effectiveState(p) == GoAction.IDLE) save()   // GO saves the form; STOP just runs
             startActivity(Intent(this, GoActivity::class.java))       // GoActivity derives GO vs STOP
         }
@@ -99,13 +88,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (p.amoled != amoledApplied) { recreate(); return }   // AMOLED toggled in Settings
         refreshSetup()
-        buildDevices()                       // refresh the "Bluetooth is off" note/button live
+        buildOutputs()                       // reflect dual-audio + BT state changes made in Settings
         refreshGoButton()
         GoAction.deriveState(applicationContext, p) { refreshGoButton() }   // match reality after reboot
         if (btReceiver == null) {
             btReceiver = object : BroadcastReceiver() {
-                override fun onReceive(c: Context, i: Intent) { buildDevices(); refreshGoButton() }
+                override fun onReceive(c: Context, i: Intent) { buildOutputs(); refreshGoButton() }
             }
             registerReceiver(btReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
         }
@@ -113,26 +103,27 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        save()   // autosave (covers the IP text field and any last change)
+        save()
         btReceiver?.let { try { unregisterReceiver(it) } catch (e: Exception) {} }
         btReceiver = null
     }
 
     private fun refreshGoButton() {
         val btn = findViewById<MaterialButton>(R.id.goButton)
-        fun paint(bg: ColorStateList?, fg: Int) {
-            btn.backgroundTintList = bg; btn.setTextColor(fg)
-            btn.iconTint = ColorStateList.valueOf(fg)
+        val accent = ContextCompat.getColor(this, R.color.accent)
+        val onAccent = ContextCompat.getColor(this, R.color.onAccent)
+        val error = ContextCompat.getColor(this, R.color.errorRed)
+        val busy = ContextCompat.getColor(this, R.color.stateBusy)
+        val secondary = ContextCompat.getColor(this, R.color.secondaryText)
+        fun paint(bg: Int, fg: Int) {
+            btn.backgroundTintList = android.content.res.ColorStateList.valueOf(bg); btn.setTextColor(fg)
         }
         btn.alpha = 1f; btn.isEnabled = true
         when (GoAction.effectiveState(p)) {
-            GoAction.ON -> {
-                btn.text = "STOP"; btn.setIconResource(R.drawable.ic_stop_white)
-                paint(ColorStateList.valueOf(0xFFB3261E.toInt()), 0xFFFFFFFF.toInt())
-            }
-            GoAction.STARTING -> { btn.text = "Starting\u2026"; btn.isEnabled = false; btn.alpha = 0.6f; paint(goBg, goFg) }
-            GoAction.STOPPING -> { btn.text = "Stopping\u2026"; btn.isEnabled = false; btn.alpha = 0.6f; paint(goBg, goFg) }
-            else -> { btn.text = "GO"; btn.setIconResource(R.drawable.ic_car_white); paint(goBg, goFg) }
+            GoAction.ON -> { btn.text = "STOP"; paint(error, onAccent) }
+            GoAction.STARTING -> { btn.text = "Starting…"; btn.isEnabled = false; paint(busy, secondary) }
+            GoAction.STOPPING -> { btn.text = "Stopping…"; btn.isEnabled = false; paint(busy, secondary) }
+            else -> { btn.text = "GO"; paint(accent, onAccent) }
         }
     }
 
@@ -141,30 +132,14 @@ class MainActivity : AppCompatActivity() {
         val btOk = ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
             PackageManager.PERMISSION_GRANTED
 
-        // Auto-tap status row: shown only while OFF (with warning), hidden once enabled.
-        val row = findViewById<View>(R.id.autoTapRow)
-        if (a11y) {
-            row.visibility = View.GONE
-        } else {
-            row.visibility = View.VISIBLE
-            findViewById<ImageView>(R.id.autoTapIcon).apply {
-                setImageResource(R.drawable.ic_error_outline)
-                setColorFilter(0xFFB3261E.toInt())
-            }
-            findViewById<TextView>(R.id.autoTapText).text = "Auto-tap off – tap to set up"
-            row.setOnClickListener { openAccessibilitySettings() }
-        }
-
-        // Top setup card: show the single most important pending action.
         val card = findViewById<View>(R.id.setupCard)
         val title = findViewById<TextView>(R.id.setupTitle)
         val body = findViewById<TextView>(R.id.setupBody)
         val btn = findViewById<MaterialButton>(R.id.setupBtn)
         when {
             !a11y -> {
-                title.text = "⚠ Setup needed"
-                body.text = "For one-tap dual audio, turn on the LazyCar auto-tap service:\n" +
-                    "1. Tap Open settings\n" +
+                title.text = "Setup needed"
+                body.text = "1. Tap Open settings\n" +
                     "2. Find LazyCar under Installed apps / Downloaded services\n" +
                     "3. Turn it on, then tap Allow"
                 btn.text = "Open settings"
@@ -172,8 +147,10 @@ class MainActivity : AppCompatActivity() {
                 card.visibility = View.VISIBLE
             }
             !btOk -> {
-                title.text = "⚠ Bluetooth permission needed"
-                body.text = "LazyCar needs the Nearby devices (Bluetooth) permission to see your paired speakers."
+                title.text = "Bluetooth permission needed"
+                body.text = "1. Tap Grant permission\n" +
+                    "2. Allow Nearby devices\n" +
+                    "3. Your paired speakers appear under OUTPUT"
                 btn.text = "Grant permission"
                 btn.setOnClickListener {
                     ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
@@ -196,8 +173,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-
     private fun accessibilityEnabled(): Boolean {
         val flat = Settings.Secure.getString(contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
@@ -206,7 +181,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, res: IntArray) {
         super.onRequestPermissionsResult(rc, perms, res)
-        buildDevices()
+        buildOutputs()
     }
 
     // ---- players ----
@@ -236,14 +211,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPlayerPicker() {
         if (players.isEmpty()) { toast("No music players found"); return }
-        val adapter = object : ArrayAdapter<Triple<String, String, Drawable?>>(
-            this, 0, players) {
+        val adapter = object : ArrayAdapter<Triple<String, String, Drawable?>>(this, 0, players) {
             override fun getView(pos: Int, cv: View?, parent: ViewGroup): View {
                 val row = cv as? TextView ?: TextView(this@MainActivity).apply {
-                    val dp = resources.displayMetrics.density
-                    setPadding((16 * dp).toInt(), (14 * dp).toInt(), (16 * dp).toInt(), (14 * dp).toInt())
+                    val d = resources.displayMetrics.density
+                    setPadding((16 * d).toInt(), (14 * d).toInt(), (16 * d).toInt(), (14 * d).toInt())
                     textSize = 16f
-                    compoundDrawablePadding = (16 * dp).toInt()
+                    compoundDrawablePadding = (16 * d).toInt()
                 }
                 val item = players[pos]
                 row.text = item.second
@@ -259,136 +233,86 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    // ---- devices ----
-    private fun buildDevices() {
+    // ---- output ----
+    private fun buildOutputs() {
+        val r = BtDevices.load(this)
+        audioDevices = r.audio
         val note = findViewById<TextView>(R.id.btNote)
         val enableBtn = findViewById<MaterialButton>(R.id.btEnable)
-        note.visibility = View.GONE; enableBtn.visibility = View.GONE
-        audioDevices = emptyList(); allDevices = emptyList()
-
-        val ok = ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
-            PackageManager.PERMISSION_GRANTED
-        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-        when {
-            !ok -> showNote(note, "Bluetooth permission needed to list paired devices.")
-            adapter == null -> showNote(note, "No Bluetooth on this device.")
-            !adapter.isEnabled -> {
-                showNote(note, "Bluetooth is off.")
-                enableBtn.visibility = View.VISIBLE
-                enableBtn.setOnClickListener {
-                    @Suppress("DEPRECATION") startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                }
+        if (r.note != null) { note.text = r.note; note.visibility = View.VISIBLE } else note.visibility = View.GONE
+        if (r.canEnable) {
+            enableBtn.visibility = View.VISIBLE
+            enableBtn.setOnClickListener {
+                @Suppress("DEPRECATION") startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
             }
-            else -> {
-                val bonded = try { adapter.bondedDevices.toList() } catch (e: SecurityException) { emptyList() }
-                if (bonded.isEmpty()) showNote(note, "No paired devices.")
-                allDevices = bonded.map { Triple(it.address, it.name ?: it.address, iconFor(it)) }
-                val audio = bonded.filter { isAudio(it) }
-                audioDevices = (if (audio.isEmpty()) bonded else audio)
-                    .map { Triple(it.address, it.name ?: it.address, iconFor(it)) }
-            }
-        }
+        } else enableBtn.visibility = View.GONE
 
-        bindDeviceRow(R.id.dev1Row, R.id.dev1Icon, R.id.dev1Value, "Device 1",
-            { audioDevices }, { selMac1 }, { m, n -> selMac1 = m; selName1 = n })
-        bindDeviceRow(R.id.dev2Row, R.id.dev2Icon, R.id.dev2Value, "Device 2",
-            { audioDevices }, { selMac2 }, { m, n -> selMac2 = m; selName2 = n })
-        bindDeviceRow(R.id.dev3Row, R.id.dev3Icon, R.id.dev3Value, "Head unit tablet (optional)",
-            { allDevices }, { selMac3 }, { m, n -> selMac3 = m; selName3 = n })
+        val dual = p.dualAudio
+        findViewById<View>(R.id.outBlock2).visibility = if (dual) View.VISIBLE else View.GONE
+
+        bindOutput(true, dual)
+        if (dual) bindOutput(false, true)
+
+        wireVol(R.id.vol1Btn, R.id.vol1Slider, { p.volOn1 }, { p.volOn1 = it }, { p.vol1 }, { p.vol1 = it })
+        wireVol(R.id.vol2Btn, R.id.vol2Slider, { p.volOn2 }, { p.volOn2 = it }, { p.vol2 }, { p.vol2 = it })
     }
 
-    private fun showNote(note: TextView, msg: String) { note.text = msg; note.visibility = View.VISIBLE }
+    private fun bindOutput(isOne: Boolean, dual: Boolean) {
+        val rowId = if (isOne) R.id.out1Row else R.id.out2Row
+        val iconId = if (isOne) R.id.out1Icon else R.id.out2Icon
+        val valueId = if (isOne) R.id.out1Value else R.id.out2Value
+        val title = when { !dual -> "Output source"; isOne -> "Output 1"; else -> "Output 2" }
+        val getMac = { if (isOne) selMac1 else selMac2 }
+        val set = { m: String, n: String -> if (isOne) { selMac1 = m; selName1 = n } else { selMac2 = m; selName2 = n } }
 
-    private fun bindDeviceRow(rowId: Int, iconId: Int, valueId: Int, default: String,
-        list: () -> List<Triple<String, String, Int>>, getMac: () -> String,
-        set: (String, String) -> Unit) {
-        renderDevice(iconId, valueId, default, getMac(), list())
+        renderDevice(iconId, valueId, title, getMac(), audioDevices)
         findViewById<View>(rowId).setOnClickListener {
-            val items = list()
-            if (items.isEmpty()) { toast("No paired devices available"); return@setOnClickListener }
-            val names = items.map { it.second }.toTypedArray()
-            val checked = items.indexOfFirst { it.first == getMac() }
+            if (audioDevices.isEmpty()) { toast("No paired devices available"); return@setOnClickListener }
+            val names = audioDevices.map { it.second }.toTypedArray()
+            val checked = audioDevices.indexOfFirst { it.first == getMac() }
             MaterialAlertDialogBuilder(this)
-                .setTitle(default.substringBefore(" (").ifEmpty { "Device" })
+                .setTitle(title)
                 .setSingleChoiceItems(names, checked) { d, which ->
-                    set(items[which].first, items[which].second)
-                    renderDevice(iconId, valueId, default, items[which].first, items)
-                    save(); d.dismiss()
+                    set(audioDevices[which].first, audioDevices[which].second)
+                    renderDevice(iconId, valueId, title, audioDevices[which].first, audioDevices); save(); d.dismiss()
                 }
                 .setNeutralButton("Clear") { _, _ ->
-                    set("", ""); renderDevice(iconId, valueId, default, "", items); save()
+                    set("", ""); renderDevice(iconId, valueId, title, "", audioDevices); save()
                 }
                 .show()
         }
     }
 
+    private fun wireVol(btnId: Int, sliderId: Int, getOn: () -> Boolean, setOn: (Boolean) -> Unit,
+                        getVol: () -> Int, setVol: (Int) -> Unit) {
+        val slider = findViewById<Slider>(sliderId)
+        slider.value = getVol().coerceIn(0, 100).toFloat()
+        slider.visibility = if (getOn()) View.VISIBLE else View.GONE
+        slider.clearOnChangeListeners()
+        slider.addOnChangeListener { _, value, _ -> setVol(value.toInt()) }
+        findViewById<MaterialButton>(btnId).setOnClickListener {
+            val on = !getOn(); setOn(on)
+            slider.visibility = if (on) View.VISIBLE else View.GONE
+        }
+    }
+
     private fun renderDevice(iconId: Int, valueId: Int, default: String, mac: String,
-        list: List<Triple<String, String, Int>>) {
+                             list: List<Triple<String, String, Int>>) {
         val icon = findViewById<ImageView>(iconId)
         val value = findViewById<TextView>(valueId)
         if (mac.isEmpty()) {
-            icon.setImageDrawable(null); value.text = default
+            icon.setImageResource(BtDevices.ICON); value.text = default
         } else {
-            val res = list.firstOrNull { it.first == mac }?.third ?: BT_ICON
-            icon.setImageResource(res)
+            icon.setImageResource(list.firstOrNull { it.first == mac }?.third ?: BtDevices.ICON)
             value.text = list.firstOrNull { it.first == mac }?.second ?: mac
         }
-    }
-
-    private fun isAudio(d: BluetoothDevice): Boolean {
-        val major = try { d.bluetoothClass?.majorDeviceClass } catch (e: SecurityException) { null }
-        if (major == BluetoothClass.Device.Major.AUDIO_VIDEO) return true
-        val uuids = try { d.uuids } catch (e: SecurityException) { null } ?: return false
-        return uuids.any { it.uuid.toString().lowercase() in AUDIO_UUIDS }
-    }
-
-    private fun iconFor(d: BluetoothDevice): Int {
-        val dc = try { d.bluetoothClass?.deviceClass } catch (e: SecurityException) { null }
-        return when (dc) {
-            BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO -> R.drawable.ic_car
-            BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET,
-            BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES,
-            BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE -> R.drawable.ic_headphones
-            BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER,
-            BluetoothClass.Device.AUDIO_VIDEO_PORTABLE_AUDIO,
-            BluetoothClass.Device.AUDIO_VIDEO_HIFI_AUDIO -> R.drawable.ic_speaker
-            else -> BT_ICON
-        }
-    }
-
-    private fun buildHeadunit() {
-        findViewById<MaterialSwitch>(R.id.headunitSwitch).apply {
-            isChecked = p.headunit
-            setOnCheckedChangeListener { _, on -> p.headunit = on }
-        }
-        findViewById<TextInputEditText>(R.id.ipField).setText(p.headunitIp)
-        val d = GoAction.detectHeadunit(this)
-        findViewById<TextView>(R.id.headunitDetected).text =
-            if (d != null) "Detected: ${d.second}" else "Detected: none installed on phone"
     }
 
     private fun save() {
         p.playerPkg = selPlayer
         p.mac1 = selMac1; p.name1 = selName1
         p.mac2 = selMac2; p.name2 = selName2
-        p.mac3 = selMac3; p.name3 = selName3
-        p.headunit = findViewById<MaterialSwitch>(R.id.headunitSwitch).isChecked
-        p.headunitIp = findViewById<TextInputEditText>(R.id.ipField).text.toString().trim()
-        p.amoled = findViewById<MaterialSwitch>(R.id.amoledSwitch).isChecked
-        p.btOffOnStop = findViewById<MaterialSwitch>(R.id.btOffSwitch).isChecked
     }
 
     private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
-
-    companion object {
-        private val AUDIO_UUIDS = setOf(
-            "0000110b-0000-1000-8000-00805f9b34fb",
-            "0000111e-0000-1000-8000-00805f9b34fb",
-            "0000184e-0000-1000-8000-00805f9b34fb"
-        )
-    }
 }
-
-/** DynamicColors without importing when unavailable; keeps onCreate tidy. */
-private fun DynamicColorsCompat(a: AppCompatActivity) =
-    com.google.android.material.color.DynamicColors.applyToActivityIfAvailable(a)

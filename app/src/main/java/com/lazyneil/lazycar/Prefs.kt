@@ -23,10 +23,21 @@ class Prefs(ctx: Context) {
     var dualAudio: Boolean get() = b("dual", true); set(v) = putB("dual", v)
     var amoled: Boolean get() = b("amoled", true); set(v) = putB("amoled", v)
     var btOffOnStop: Boolean get() = b("btoff", false); set(v) = putB("btoff", v)
+    // True once both speakers are in the audio-sharing group; lets GO skip re-opening the switcher.
+    var grouped: Boolean get() = b("grouped", false); set(v) = putB("grouped", v)
     private fun i(k: String, def: Int) = sp.getInt(k, def)
     private fun l(k: String, def: Long) = sp.getLong(k, def)
     // GO state machine: 0 IDLE, 1 STARTING, 2 ON, 3 STOPPING. Writing state stamps the time.
     var state: Int get() = i("state", 0)
         set(v) = sp.edit().putInt("state", v).putLong("stateTs", System.currentTimeMillis()).apply()
     val stateTs: Long get() = l("stateTs", 0L)
+
+    // UI-added keys (per-output volume + connectivity toggles).
+    private fun putI(k: String, v: Int) = sp.edit().putInt(k, v).apply()
+    var vol1: Int get() = i("vol1", 50); set(v) = putI("vol1", v)
+    var vol2: Int get() = i("vol2", 50); set(v) = putI("vol2", v)
+    var volOn1: Boolean get() = b("volOn1", false); set(v) = putB("volOn1", v)
+    var volOn2: Boolean get() = b("volOn2", false); set(v) = putB("volOn2", v)
+    var hotspot: Boolean get() = b("hotspot", false); set(v) = putB("hotspot", v)
+    var mobileData: Boolean get() = b("mobileData", false); set(v) = putB("mobileData", v)
 }
