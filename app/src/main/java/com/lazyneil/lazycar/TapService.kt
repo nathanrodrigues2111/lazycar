@@ -19,6 +19,8 @@ import java.util.Collections
  *    we scan getWindows() every 400ms while armed and click what we find. No privileged permission.
  */
 class TapService : AccessibilityService() {
+    class Tile(val labels: List<String>, val wantOn: Boolean, val snapKey: String, val feature: String)
+
     companion object {
         @Volatile private var instance: TapService? = null
 
@@ -42,6 +44,17 @@ class TapService : AccessibilityService() {
             buttonTexts = texts; buttonArmedUntil = SystemClock.uptimeMillis() + windowMs; buttonDumped = false
         }
         fun disarmButtons() { buttonTexts = emptyList(); buttonArmedUntil = 0L }
+
+        // ---- quick-settings tile mode (mobile data / hotspot), all in one QS session ----
+        @Volatile var tiles: List<Tile> = emptyList()
+        @Volatile var tileArmedUntil: Long = 0L
+        /** Open Quick Settings once and drive every [tiles] entry to its wanted state, recording each
+         *  tile's pre-state into Prefs[snapKey] (blank key = don't record). */
+        fun armTiles(t: List<Tile>, windowMs: Long = 9000L) {
+            tiles = t; tileArmedUntil = SystemClock.uptimeMillis() + windowMs
+            instance?.startTilePoll()
+        }
+        fun disarmTiles() { tileArmedUntil = 0L; tiles = emptyList() }
     }
 
     private val h = Handler(Looper.getMainLooper())
@@ -50,6 +63,9 @@ class TapService : AccessibilityService() {
     private var reSent = false
     private val volSet = Collections.synchronizedSet(mutableSetOf<String>())
     private val volTries = Collections.synchronizedMap(mutableMapOf<String, Int>())
+    private var tileOpened = false
+    private var tileFinished = false
+    private val tileDone = Collections.synchronizedSet(mutableSetOf<String>())
 
     override fun onServiceConnected() { instance = this }
     override fun onDestroy() { if (instance === this) instance = null; super.onDestroy() }
@@ -172,6 +188,54 @@ class TapService : AccessibilityService() {
         val m = Regex("(?:Connected to|Playing on|In use.*?) ?(.+?)\\.?$").find(d) ?: return null
         return m.groupValues.getOrNull(1)?.trim()?.ifEmpty { null }
     }
+
+    // ---- quick-settings tile toggle (mobile data / hotspot) ----
+
+    fun startTilePoll() {
+        tileOpened = false; tileFinished = false; tileDone.clear()
+        h.removeCallbacks(tileRunnable); h.post(tileRunnable)
+    }
+
+    private val tileRunnable = object : Runnable {
+        override fun run() {
+            if (tileArmedUntil == 0L || tileFinished) return
+            if (SystemClock.uptimeMillis() >= tileArmedUntil) {
+                (tiles.map { it.feature } - tileDone).forEach { android.util.Log.e("LazyCar", "tile '$it' not found (timeout)") }
+                finishTile(); return
+            }
+            if (!tileOpened) { tileOpened = true; performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS) }
+            val roots = (windows ?: emptyList()).mapNotNull { it.root }.filter { it.packageName == "com.android.systemui" }
+            for (t in tiles) {
+                if (t.feature in tileDone) continue
+                var node: AccessibilityNodeInfo? = null
+                for (root in roots) { node = find(root) { n ->
+                    n.isCheckable && n.contentDescription?.toString()?.let { d -> t.labels.any { d.contains(it, true) } } == true
+                }; if (node != null) break }
+                val n = node ?: continue
+                val on = n.isChecked
+                when (t.snapKey) {                        // record pre-toggle state for STOP to restore
+                    "snapData" -> Prefs(applicationContext).snapDataWasOn = on
+                    "snapHotspot" -> Prefs(applicationContext).snapHotspotWasOn = on
+                }
+                if (on != t.wantOn) {
+                    val target = if (n.isClickable) n else clickableAncestor(n) ?: n
+                    val ok = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    android.util.Log.e("LazyCar", "tile '${t.feature}' was ${onoff(on)} -> ${onoff(t.wantOn)} ok=$ok")
+                } else android.util.Log.e("LazyCar", "tile '${t.feature}' already ${onoff(on)} -> left")
+                tileDone.add(t.feature)
+            }
+            if (tiles.all { it.feature in tileDone }) { finishTile(); return }
+            h.postDelayed(this, 400)
+        }
+    }
+
+    private fun finishTile() {
+        if (tileFinished) return
+        tileFinished = true; disarmTiles()
+        h.postDelayed({ performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE) }, 500)
+    }
+
+    private fun onoff(b: Boolean) = if (b) "on" else "off"
 
     private fun reopenSwitcher() {
         val pkg = Prefs(applicationContext).playerPkg

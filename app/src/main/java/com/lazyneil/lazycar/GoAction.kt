@@ -42,8 +42,9 @@ object GoAction {
     }
 
     fun sequenceDuration(p: Prefs): Long {
-        // Keep the foreground service alive through the whole share poll (arm window 8.5s + dismiss).
-        val shareEnd = if (p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()) 3000L + 9500L else 0L
+        // Keep the foreground service alive through the network toggles + the whole share poll.
+        val net = (if (p.mobileData) 4000L else 0L) + (if (p.hotspot) 4000L else 0L)
+        val shareEnd = if (p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()) net + 3000L + 9500L else 0L
         return maxOf(5000L, shareEnd) + 1500L
     }
 
@@ -94,10 +95,18 @@ object GoAction {
             var doneAt = 0L
             if (need2) doneAt = 400L; if (need3) doneAt = 800L
 
-            if (musicActive) log("skipped player launch (music active)")
-            else { main.postDelayed({ launchPlayer(ctx, p.playerPkg) }, settle); doneAt = maxOf(doneAt, settle) }
+            // Order: BT -> connects -> mobile data + hotspot -> player -> share -> play. Both network
+            // tiles are toggled in one Quick Settings session before the player/switcher.
+            var netAt = settle
+            if (p.mobileData || p.hotspot) {
+                main.postDelayed({ setNetwork(if (p.mobileData) true else null, if (p.hotspot) true else null, record = true) }, netAt)
+                doneAt = maxOf(doneAt, netAt + 6000L); netAt += 6500L
+            }
 
-            val shareAt = settle + (if (musicActive) 0L else 1000L)
+            if (musicActive) log("skipped player launch (music active)")
+            else { main.postDelayed({ launchPlayer(ctx, p.playerPkg) }, netAt); doneAt = maxOf(doneAt, netAt) }
+
+            val shareAt = netAt + (if (musicActive) 0L else 1000L)
             val wantShare = p.dualAudio && p.mac1.isNotEmpty() && p.mac2.isNotEmpty()
             val alreadyGrouped = p.grouped && !need1 && !need2
             when {
@@ -167,6 +176,18 @@ object GoAction {
         } catch (e: Exception) {
             log("shareAudio failed ${e.message}"); openOutputSwitcher(ctx, playerPkg)
         }
+    }
+
+    /**
+     * Drive mobile data and/or the Wi-Fi hotspot to [wantOn] via their Quick Settings tiles (there's
+     * no public setter for either without a privileged permission). [record] snapshots each tile's
+     * pre-state so STOP can restore it. GO passes both wanted-on; STOP passes only what it must undo.
+     */
+    fun setNetwork(data: Boolean?, hotspot: Boolean?, record: Boolean) {
+        val t = mutableListOf<TapService.Tile>()
+        if (data != null) t += TapService.Tile(listOf("Mobile data"), data, if (record) "snapData" else "", "mobile data")
+        if (hotspot != null) t += TapService.Tile(listOf("hotspot"), hotspot, if (record) "snapHotspot" else "", "hotspot")
+        if (t.isNotEmpty()) { log("network: ${t.joinToString { "${it.feature}->${it.wantOn}" }}"); TapService.armTiles(t) }
     }
 
     private fun openOutputSwitcher(ctx: Context, playerPkg: String) {
@@ -265,14 +286,21 @@ object GoAction {
             if (mac.isNotEmpty() && !wasConnected) { log("restore: $mac connected -> disconnected"); disconnectA2dp(ctx, mac) }
             else if (mac.isNotEmpty()) log("restore: $mac was already connected -> left")
 
-        if (!p.snapBtWasOn) { log("restore: bt on -> off"); disableBt(ctx) }
+        // Network tiles (one QS session) then BT-off (its own dialog) open system UI: serialize them.
+        val offData = if (p.mobileData && !p.snapDataWasOn) false else null
+        val offHotspot = if (p.hotspot && !p.snapHotspotWasOn) false else null
+        if (p.hotspot) log(if (offHotspot != null) "restore: hotspot on -> off" else "restore: hotspot was already on -> left")
+        if (p.mobileData) log(if (offData != null) "restore: data on -> off" else "restore: data was already on -> left")
+        var at = 0L
+        if (offData != null || offHotspot != null) { main.postDelayed({ setNetwork(offData, offHotspot, record = false) }, at); at += 6500L }
+        if (!p.snapBtWasOn) { log("restore: bt on -> off"); main.postDelayed({ disableBt(ctx) }, at); at += 12500L }
         else log("restore: bt was already on -> left")
 
         // Only kill the player if GO launched it (music wasn't already playing before GO).
         if (!p.snapMusicWasActive) try { (ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager)
             .killBackgroundProcesses(p.playerPkg) } catch (e: Exception) {}
-        main.postDelayed({ setState(ctx, p, IDLE) }, 1800)
-        return if (!p.snapBtWasOn) 13000L else 2500L
+        main.postDelayed({ setState(ctx, p, IDLE) }, maxOf(1800L, at))
+        return maxOf(2500L, at + 500L)
     }
 
     /**
