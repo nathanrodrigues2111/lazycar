@@ -1,0 +1,40 @@
+<resources>
+    <style name="Theme.LazyCar" parent="Theme.Material3Expressive.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <!-- No-UI GoActivity: framework translucent, no Material widgets used -->
+    <style name="Theme.Translucent" parent="@android:style/Theme.Translucent.NoTitleBar" />
+    <style name="PickerRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:paddingHorizontal">10dp</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+    <style name="PickerValue">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">14dp</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+    <style name="ThemeOverlay.LazyCar.Amoled" parent="">
+        <item name="android:colorBackground">#FF000000</item>
+        <item name="android:windowBackground">#FF000000</item>
+        <item name="colorSurface">#FF000000</item>
+        <item name="colorSurfaceDim">#FF000000</item>
+        <item name="colorSurfaceBright">#FF1A1A1A</item>
+        <item name="colorSurfaceContainerLowest">#FF000000</item>
+        <item name="colorSurfaceContainerLow">#FF0D0D0D</item>
+        <item name="colorSurfaceContainer">#FF111111</item>
+        <item name="colorSurfaceContainerHigh">#FF161616</item>
+        <item name="colorSurfaceContainerHighest">#FF1C1C1C</item>
+    </style>
+</resources>

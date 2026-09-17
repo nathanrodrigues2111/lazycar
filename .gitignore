@@ -1,0 +1,15 @@
+# build
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+local.properties
+# IDE
+.idea/
+*.iml
+# pulled OEM binaries (proprietary, never commit)
+reverse/*
+!reverse/SHARING_API.md
+# screenshots
+screenshot-*.png
