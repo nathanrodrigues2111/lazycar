@@ -36,6 +36,14 @@ One tap runs the full sequence, a second tap stops and restores. STOP only undoe
 | Launches your music player and presses play | |
 | Optionally launches Open Headunit / Android Auto | |
 
+## Why this exists
+
+This is a very niche project, and that is the point. It was built for one person, one phone, and one car.
+
+Every drive started the same way: turn Bluetooth on, connect the first speaker, connect the second one, open the Bluetooth settings, dig into Audio sharing and tick both speakers, turn on the hotspot, open the music app, press play, then fix the volume because OnePlus resets it to max when the group forms. Around ten taps across four different screens, every single time, and the same again in reverse when parking. OnePlus dual audio has no shortcut, no widget, no automation hook, and no public API, so nothing in Tasker, Bixby-style routines, or Android Auto could do it.
+
+LazyCar collapses all of that into one tap on a home screen widget, and one more tap to put everything back exactly as it was. It targets OnePlus phones with the Audio sharing feature, two Bluetooth speakers in a car, and nothing else. If that is not your setup, this app will do very little for you. If it is, it saves a minute of fiddling every time you get in the car.
+
 ## Features
 
 | | |
