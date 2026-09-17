@@ -11,6 +11,8 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.provider.Settings
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.MarginLayoutParams
@@ -43,6 +45,28 @@ class MainActivity : AppCompatActivity() {
     private var selMac2 = ""; private var selName2 = ""
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    // Swipe left anywhere on the screen opens Settings (same target as the cog button).
+    // Fed via dispatchTouchEvent so it never consumes events; scrolling, row taps and the
+    // volume slider keep working. ponytail: a fast leftward flick that starts on the volume
+    // slider can also trigger it; add a slider-region guard if that proves annoying.
+    private val swipeLeft by lazy {
+        GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+                val dx = e2.x - (e1?.x ?: return false)
+                if (dx < -dp(100) && -dx > 2 * kotlin.math.abs(e2.y - e1.y) && vx < 0) {
+                    startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+                    return true
+                }
+                return false
+            }
+        })
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        swipeLeft.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)

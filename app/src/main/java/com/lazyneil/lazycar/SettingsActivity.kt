@@ -7,6 +7,8 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.widget.GridLayout
 import android.widget.ImageView
@@ -26,6 +28,27 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var p: Prefs
     private var selMac3 = ""; private var selName3 = ""
     private var allDevices = listOf<Triple<String, String, Int>>()
+
+    // Swipe right anywhere goes back to the main screen (same as the toolbar back button).
+    // Fed via dispatchTouchEvent so it never consumes events. ponytail: a fast rightward flick
+    // that starts on a control can also trigger it; add a region guard if that proves annoying.
+    private val swipeBack by lazy {
+        GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+                val dx = e2.x - (e1?.x ?: return false)
+                if (dx > 100 * resources.displayMetrics.density && dx > 2 * kotlin.math.abs(e2.y - e1.y) && vx > 0) {
+                    finish()
+                    return true
+                }
+                return false
+            }
+        })
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        swipeBack.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         p = Prefs(this)

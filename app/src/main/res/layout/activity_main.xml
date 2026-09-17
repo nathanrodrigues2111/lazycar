@@ -124,7 +124,9 @@
                     <TextView style="@style/CardLabel" android:text="PLAYER" />
                     <LinearLayout android:id="@+id/playerRow" style="@style/Row56" android:layout_marginTop="4dp">
                         <FrameLayout style="@style/IconCircle">
-                            <ImageView android:id="@+id/playerIcon" style="@style/RowIcon" />
+                            <ImageView android:id="@+id/playerIcon" style="@style/RowIcon"
+                                android:layout_width="36dp" android:layout_height="36dp"
+                                android:scaleType="fitCenter" />
                         </FrameLayout>
                         <TextView android:id="@+id/playerValue" style="@style/RowTitle" android:text="Choose a player" />
                         <ImageView style="@style/ChevronIcon" />
