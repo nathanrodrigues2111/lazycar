@@ -1,113 +1,118 @@
 # LazyCar
 
-One tap to set up your phone for the car: connect two paired Bluetooth audio
-devices, launch your music player and start playback, and optionally launch
-Open Headunit.
+One tap car mode for OnePlus (Android 16). LazyCar turns on Bluetooth, connects
+two Bluetooth audio outputs, enables OnePlus Audio sharing (dual audio) on both,
+optionally turns on the hotspot and mobile data, sets a start volume, launches
+your music player and presses play. Tap again to STOP and restore everything
+exactly as it was.
 
-## Build
+## Screenshots
 
-Requires JDK 17 and the Android SDK (platform 35, build-tools 35).
+![Main screen](shots/main.png)
+![Widget ready](shots/widget_on.png)
+![Starting](shots/app_starting.png)
+![Running](shots/app_on.png)
+![Settings](shots/settings.png)
+![Help](shots/help.png)
 
-```
-./gradlew assembleDebug
-```
+## Features
 
-APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
+- One tap to set up the car and one tap to tear it down.
+- Turns Bluetooth on, connects both paired outputs, and enables OnePlus Audio
+  sharing so both speakers play at once.
+- Optional Wi-Fi hotspot and mobile data toggles.
+- Optional start volume applied when GO runs.
+- Launches your chosen music player and presses play.
+- Optional launch of Open Headunit / Android Auto.
+- STOP restores the exact state from before GO: it only undoes what GO turned
+  on, and leaves anything that was already on untouched.
+- 1x1 home screen widget, or a big GO button in the app.
+
+## Requirements
+
+- A OnePlus phone with the Audio sharing (dual audio) feature.
+- Android 12 or newer (minSdk 31). Tested on OnePlus 15 running Android 16.
+- Two Bluetooth audio outputs already paired in Android's Bluetooth settings.
 
 ## Install
 
-```
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+Download the APK from the Releases page and install it, or build from source:
 
-## Use
+- Install JDK 17 and the Android SDK.
+- Run `./gradlew assembleDebug`.
+- The APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
 
-1. Open **LazyCar**. Grant the Bluetooth permission when asked.
-2. On the main screen pick your **music player** and the two **outputs**
-   (both must already be paired in Android's Bluetooth settings). Settings save
-   themselves; there is no Save button.
-3. Open **Settings** (cog, top right) for the switches: Dual audio, head unit
-   plus tablet and IP, Wi-Fi hotspot, Mobile data, accent colour, and the
-   accessibility setup. **Help** (top right) has a short Q and A.
-4. Add the **LazyCar** 1x1 widget to your home screen.
+## Setup
 
-Now one tap on the widget (or the big **GO** button in the app) runs, in order:
-turn Bluetooth on, connect both outputs, turn on mobile data and the hotspot if
-enabled, open the player, enable dual-audio sharing across both speakers, set
-each output's volume if enabled, and press Play. The head unit launches too if
-enabled.
+1. Pair both Bluetooth outputs in Android's Bluetooth settings.
+2. Enable Audio sharing once from the Bluetooth settings (OnePlus dual audio).
+3. Open LazyCar and enable it in Settings > Accessibility.
+4. Add the LazyCar 1x1 widget to your home screen.
+5. In the app, pick your music player, your two outputs, and a start volume.
+   Settings save themselves, there is no Save button.
 
-**GO / STOP snapshot.** At GO, LazyCar records what was already on (Bluetooth,
-mobile data, hotspot, which outputs were connected, whether music was playing).
-STOP restores exactly that: it only turns off / disconnects / pauses the things
-GO itself turned on, and leaves anything that was already on untouched.
+Now one tap on the widget (or the GO button) runs the full sequence, and a
+second tap stops and restores.
 
-Feature switches (in Settings):
+## How it works
 
-- **Dual audio** (default on): after both outputs connect, LazyCar opens the
-  system output switcher and (via the accessibility service) ticks every
-  "Add device to group." row so both speakers share audio. The privileged
-  OnePlus sharing API can't be called by a side-loaded app (see
-  `reverse/SHARING_API.md`), hence the switcher automation. Once grouped, a
-  repeat GO skips the switcher entirely.
-- **Wi-Fi hotspot** / **Mobile data** (default off): there is no public API to
-  toggle either, so LazyCar flips their Quick Settings tiles through the
-  accessibility service, only when they are in the wrong state.
-- **Per-output volume** (default off): a slider under each output. When on, GO
-  sets that output's slider in the switcher. See "Testing volume" below.
+OnePlus and Android expose no public API a side-loaded app can call to start
+Audio sharing, so LazyCar drives the same system panels you would tap by hand.
+An Accessibility service (`TapService`) taps the system Audio sharing panel and
+the Bluetooth enable/disable prompts for you.
 
-## Notes
+The privileged path exists but is blocked for normal apps. OnePlus ships
+`OplusA2dpSharingManager.startSharing(...)`, but the Bluetooth server enforces
+the `android.permission.BLUETOOTH_PRIVILEGED` and OnePlus
+`com.oplus.permission.safe.BLUETOOTH` permissions, both `signature|privileged`,
+which a Play Store or side-loaded app cannot hold. Details are in
+`reverse/SHARING_API.md`.
 
-Bluetooth connect uses the A2DP/Headset profile proxy via reflection, which is
-best-effort: failures are logged, they never crash the app. If a device won't
-connect on your ROM, that's the piece to revisit (`GoAction.connectA2dp`).
+`MediaRouter2` is the only public API that could in principle start sharing,
+but that needs `MEDIA_ROUTING_CONTROL` (also privileged) and the OnePlus route
+provider only advertises the speaker group after sharing is already on, so it
+is not usable here. Tapping the system panel is the reliable path.
 
-The accessibility service (`TapService`) is required for dual audio, the
-Bluetooth enable/disable dialogs, the hotspot/data tiles, and volume. Note that
-`adb install -r` and `am force-stop` both unbind it on OnePlus; re-enable it in
-Settings > Accessibility (or via `settings put secure
-enabled_accessibility_services ...`) after either.
+## Privacy
 
-## Testing volume
+LazyCar makes no internet requests and collects no data. The Accessibility
+service is used only to operate the listed system panels: the Audio sharing
+panel, the Bluetooth enable/disable prompts, the hotspot and mobile data Quick
+Settings tiles, and the volume slider. It does nothing else.
 
-Per-output volume drives the switcher's `volume_seekbar` sliders through the
-accessibility service. On some ROMs (OnePlus 15 seen here) those sliders ACK
-`ACTION_SET_PROGRESS` but ignore it, so per slider LazyCar tries
-`ACTION_SET_PROGRESS` first, verifies (re-reads `rangeInfo.current` after 350ms),
-and if the value is still more than 4% off it moves the slider with a real touch
-gesture (`dispatchGesture`, needs `android:canPerformGestures`): first a tap at
-the target position, then, if that misses, a drag from the current thumb to the
-target. The panel is held open until every slider verifies or a 3s budget
-elapses, so it never backs out mid-gesture. `AudioManager.setStreamVolume` is
-used only when the slider node is absent entirely.
+## Known limits
 
-To test on a device:
+- OnePlus volume is shared across the whole group, so there is a single start
+  volume, not one per output.
+- The auto-tap depends on OnePlus SystemUI element ids. A SystemUI update can
+  move them and break the tapping until LazyCar is updated.
+- Reinstalling via `adb install -r` (or `am force-stop`) unbinds the
+  Accessibility service on OnePlus. Re-enable it in Settings > Accessibility.
 
-1. Set volumes in the app (a slider under each output; toggle "Volume" on).
-2. `adb shell am start -n com.lazyneil.lazycar/.GoActivity --ez volumeOnly true`
-   opens the switcher and applies volumes only (no full GO).
-3. Watch `adb logcat -v time -s LazyCar:V`. Each slider logs a
-   `volume '<name>' set_progress -> <v> ...` line, then exactly one resolution
-   line naming the method that landed it:
-   `volume '<name>' target=<v> got=<actual> via=set_progress|tap|drag`
-   (`got` should be within 4% of `target`). A missing slider instead logs
-   `volume '<name>' slider absent; stream fallback`.
-4. Dragging a slider in the app while state is ON also applies it live.
+## Testing notes
 
-Pure mapping logic lives in `VolumeMath`; run `./gradlew testDebugUnitTest`.
+Debug entry points, driven with adb against `GoActivity`:
 
-## Head unit / Android Auto (tablet setup)
+- Sharing only: `adb shell am start -n com.lazyneil.lazycar/.GoActivity --ez shareOnly true`
+- Volume only: `adb shell am start -n com.lazyneil.lazycar/.GoActivity --ez volumeOnly true`
 
-Open Headunit runs on the **tablet** as the Android Auto receiver; the phone is
-the source. To make one tap wake it:
+Watch live logs with `adb logcat -v time -s LazyCar:V`.
 
-1. Install **Open Headunit** (`com.andrerinas.headunitrevived`) on the tablet.
-2. In Open Headunit, enable **auto-start on Bluetooth connect**.
-3. **Pair the tablet with the phone** over Bluetooth, then pick it as the
-   "Head unit tablet" in LazyCar so GO sends it a BT link to trigger auto-start.
-4. For wireless Android Auto, enable AA developer settings > **Start head unit
-   server** on the tablet.
+## Project layout
 
-On GO the phone connects the tablet over Bluetooth, then launches the first
-installed phone-side path: Open Headunit Wireless Helper, else Open Headunit
-(self mode; uses the IP field if set), else Android Auto.
+- `Accent.kt` accent colour handling.
+- `BtDevices.kt` paired Bluetooth device lookup.
+- `GoAction.kt` the GO/STOP sequence and state snapshot/restore.
+- `GoActivity.kt` translucent launcher for GO, plus debug extras.
+- `GoService.kt` foreground service that runs the sequence.
+- `GoWidget.kt` the 1x1 home screen widget.
+- `HelpActivity.kt` in-app help screen.
+- `MainActivity.kt` main screen: player, outputs, start volume, GO button.
+- `Prefs.kt` saved settings.
+- `SettingsActivity.kt` settings screen.
+- `TapService.kt` Accessibility service that taps the system panels.
+- `VolumeMath.kt` volume value mapping.
+
+## License
+
+MIT. See `LICENSE`.
