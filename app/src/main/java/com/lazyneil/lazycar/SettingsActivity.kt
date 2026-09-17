@@ -2,9 +2,13 @@ package com.lazyneil.lazycar
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -70,6 +74,11 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         buildHeadunitPicker()
+        applyAccent()
+        findViewById<View>(R.id.accentRow).setOnClickListener { showAccentDialog() }
+        findViewById<View>(R.id.helpRow).setOnClickListener {
+            startActivity(Intent(this, HelpActivity::class.java))
+        }
 
         val v = try { packageManager.getPackageInfo(packageName, 0) } catch (e: Exception) { null }
         findViewById<TextView>(R.id.versionText).text =
@@ -134,6 +143,49 @@ class SettingsActivity : AppCompatActivity() {
             icon.setImageResource(allDevices.firstOrNull { it.first == selMac3 }?.third ?: BtDevices.ICON)
             value.text = allDevices.firstOrNull { it.first == selMac3 }?.second ?: selName3
         }
+    }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    /** Tint the accent-driven controls (switches + the row preview dot). */
+    private fun applyAccent() {
+        val accent = Accent.color(this)
+        val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+        val track = ColorStateList(states, intArrayOf(accent, 0xFF3A3F45.toInt()))
+        val thumb = ColorStateList(states, intArrayOf(Accent.onColor(accent), 0xFF9AA0A6.toInt()))
+        intArrayOf(R.id.dualSwitch, R.id.amoledSwitch, R.id.headunitSwitch,
+            R.id.hotspotSwitch, R.id.mobileSwitch).forEach {
+            findViewById<MaterialSwitch>(it).apply { trackTintList = track; thumbTintList = thumb }
+        }
+        findViewById<View>(R.id.accentDot).backgroundTintList = ColorStateList.valueOf(accent)
+    }
+
+    private fun showAccentDialog() {
+        val grid = GridLayout(this).apply { columnCount = 4; val pad = dp(12); setPadding(pad, pad, pad, pad) }
+        val cur = p.accent
+        lateinit var dialog: androidx.appcompat.app.AlertDialog
+        Accent.swatches.forEach { (label, value) ->
+            val fill = if (value == 0) Accent.systemColor(this) else value
+            grid.addView(View(this).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL; setColor(fill)
+                    if (value == cur) setStroke(dp(3), Color.WHITE) else setStroke(dp(1), 0x55FFFFFF)
+                }
+                layoutParams = GridLayout.LayoutParams().apply {
+                    width = dp(40); height = dp(40); setMargins(dp(10), dp(10), dp(10), dp(10))
+                }
+                contentDescription = label
+                setOnClickListener {
+                    p.accent = value; GoWidget.refresh(this@SettingsActivity); dialog.dismiss(); recreate()
+                }
+            })
+        }
+        dialog = MaterialAlertDialogBuilder(this)
+            .setTitle("Accent color")
+            .setView(grid)
+            .setNegativeButton("Cancel", null)
+            .create()
+        dialog.show()
     }
 
     private fun openAccessibilitySettings() {

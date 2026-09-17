@@ -66,6 +66,33 @@
                         android:textColor="@color/white"
                         android:textSize="17sp" />
 
+                    <!-- Accent colour -->
+                    <LinearLayout
+                        android:id="@+id/accentRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="56dp"
+                        android:layout_marginTop="8dp"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Accent color"
+                            android:textColor="@color/white"
+                            android:textSize="17sp" />
+                        <View
+                            android:id="@+id/accentDot"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginEnd="8dp"
+                            android:background="@drawable/circle_icon_bg" />
+                        <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
+
                     <!-- Car head unit -->
                     <com.google.android.material.materialswitch.MaterialSwitch
                         android:id="@+id/headunitSwitch"
@@ -140,15 +167,28 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Accessibility status -->
+            <!-- Accessibility status + Help -->
             <com.google.android.material.card.MaterialCardView
                 style="@style/CardBox"
                 android:layout_marginBottom="12dp">
-                <LinearLayout android:id="@+id/a11yRow" style="@style/Row56" android:paddingHorizontal="16dp">
-                    <FrameLayout style="@style/IconCircle">
-                        <ImageView android:id="@+id/a11yIcon" style="@style/RowIcon" />
-                    </FrameLayout>
-                    <TextView android:id="@+id/a11yText" style="@style/RowTitle" android:text="Auto-tap ready" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="16dp">
+                    <LinearLayout android:id="@+id/a11yRow" style="@style/Row56">
+                        <FrameLayout style="@style/IconCircle">
+                            <ImageView android:id="@+id/a11yIcon" style="@style/RowIcon" />
+                        </FrameLayout>
+                        <TextView android:id="@+id/a11yText" style="@style/RowTitle" android:text="Auto-tap ready" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/helpRow" style="@style/Row56">
+                        <FrameLayout style="@style/IconCircle">
+                            <ImageView android:id="@+id/helpIcon" style="@style/RowIcon" android:src="@drawable/ic_help" app:tint="@color/white" />
+                        </FrameLayout>
+                        <TextView style="@style/RowTitle" android:text="Help" />
+                        <ImageView style="@style/ChevronIcon" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
