@@ -8,12 +8,16 @@ exactly as it was.
 
 ## Screenshots
 
-![Main screen](shots/main.png)
-![Widget ready](shots/widget_on.png)
-![Starting](shots/app_starting.png)
-![Running](shots/app_on.png)
-![Settings](shots/settings.png)
-![Help](shots/help.png)
+<p align="center">
+  <img src="shots/main.png" width="200" alt="Main screen">
+  <img src="shots/widget_on.png" width="200" alt="Widget">
+  <img src="shots/app_starting.png" width="200" alt="Starting">
+</p>
+<p align="center">
+  <img src="shots/app_on.png" width="200" alt="Running">
+  <img src="shots/settings.png" width="200" alt="Settings">
+  <img src="shots/help.png" width="200" alt="Help">
+</p>
 
 ## Features
 
