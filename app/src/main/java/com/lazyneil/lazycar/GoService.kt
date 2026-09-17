@@ -29,6 +29,7 @@ class GoService : Service() {
                 val pkg = intent.getStringExtra("player").orEmpty()
                 GoAction.shareAudio(applicationContext, m1, m2, pkg); 9000L
             }
+            "volume" -> { GoAction.applyVolumesNow(applicationContext); 11000L }
             else -> GoAction.run(applicationContext)
         }
         Handler(Looper.getMainLooper()).postDelayed({
@@ -47,7 +48,7 @@ class GoService : Service() {
         return Notification.Builder(this, chId)
             .setContentTitle("LazyCar")
             .setContentText("Setting up for the car…")
-            .setSmallIcon(R.drawable.ic_car_white)
+            .setSmallIcon(R.drawable.ic_car_glyph)
             .build()
     }
 }

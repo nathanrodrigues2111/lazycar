@@ -307,6 +307,15 @@ class MainActivity : AppCompatActivity() {
         slider.visibility = if (getOn()) View.VISIBLE else View.GONE
         slider.clearOnChangeListeners()
         slider.addOnChangeListener { _, value, _ -> setVol(value.toInt()) }
+        // Dragging while playing applies the new level live (open panel, set slider, back).
+        slider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(s: Slider) {}
+            override fun onStopTrackingTouch(s: Slider) {
+                setVol(s.value.toInt())
+                if (GoAction.effectiveState(p) == GoAction.ON)
+                    startActivity(Intent(this@MainActivity, GoActivity::class.java).putExtra("volumeOnly", true))
+            }
+        })
         findViewById<MaterialButton>(btnId).apply {
             setTextColor(Accent.color(this@MainActivity))
             setOnClickListener {

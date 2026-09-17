@@ -11,6 +11,7 @@ class GoActivity : Activity() {
         val p = Prefs(applicationContext)
         val svc = Intent(this, GoService::class.java)
         when {
+            intent?.getBooleanExtra("volumeOnly", false) == true -> svc.putExtra("action", "volume")
             intent?.getBooleanExtra("shareOnly", false) == true -> svc.putExtra("action", "share")
                 .putExtra("mac1", p.mac1.ifEmpty { intent.getStringExtra("mac1").orEmpty() })
                 .putExtra("mac2", p.mac2.ifEmpty { intent.getStringExtra("mac2").orEmpty() })

@@ -172,6 +172,13 @@ object GoAction {
      * MediaRouter2 can't do it (the app only sees DEFAULT_ROUTE) and the OnePlus startSharing API
      * needs the signature perm com.oplus.permission.safe.BLUETOOTH - see reverse/SHARING_API.md.
      */
+    /** Open the output panel just to (re)apply per-device volumes; the poll sets sliders and backs out. */
+    fun applyVolumesNow(ctx: Context) {
+        val p = Prefs(ctx)
+        log("volumeOnly: opening panel to apply volumes")
+        shareAudio(ctx, p.mac1, p.mac2, p.playerPkg)
+    }
+
     fun shareAudio(ctx: Context, mac1: String, mac2: String, playerPkg: String) {
         try {
             TapService.arm()                    // starts the poll that ticks every "Add device to group." row

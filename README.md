@@ -23,33 +23,69 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## Use
 
 1. Open **LazyCar**. Grant the Bluetooth permission when asked.
-2. Pick your **music player**, **Bluetooth device 1** and **device 2** (both
-   must already be paired in Android's Bluetooth settings).
-3. Optionally tick **Also launch Open Headunit** and enter its IP.
-4. Tap **Save settings**.
-5. Add the **LazyCar** 1x1 widget to your home screen.
+2. On the main screen pick your **music player** and the two **outputs**
+   (both must already be paired in Android's Bluetooth settings). Settings save
+   themselves; there is no Save button.
+3. Open **Settings** (cog, top right) for the switches: Dual audio, head unit
+   plus tablet and IP, Wi-Fi hotspot, Mobile data, accent colour, and the
+   accessibility setup. **Help** (top right) has a short Q and A.
+4. Add the **LazyCar** 1x1 widget to your home screen.
 
-Now one tap on the widget (or the big **GO** button in the app) will:
-connect both Bluetooth devices, wait ~2s, open the player, try to enable
-dual-audio sharing across both speakers, press Play, and launch the head unit
-if enabled.
+Now one tap on the widget (or the big **GO** button in the app) runs, in order:
+turn Bluetooth on, connect both outputs, turn on mobile data and the hotspot if
+enabled, open the player, enable dual-audio sharing across both speakers, set
+each output's volume if enabled, and press Play. The head unit launches too if
+enabled.
 
-Two extra switches:
+**GO / STOP snapshot.** At GO, LazyCar records what was already on (Bluetooth,
+mobile data, hotspot, which outputs were connected, whether music was playing).
+STOP restores exactly that: it only turns off / disconnects / pauses the things
+GO itself turned on, and leaves anything that was already on untouched.
 
-- **Dual audio (audio sharing)** (default on): after both speakers connect,
-  LazyCar tries to route audio to both via `MediaRouter2`. The privileged
-  OnePlus "dual audio" API can't be called by a side-loaded app (see
-  `reverse/SHARING_API.md`), so if the automatic path doesn't take, it opens the
-  system output switcher for a one-tap enable.
-- **AMOLED black** (default on): pure-black surfaces for OLED screens, keeping
-  the dynamic-color accents. Toggling recreates the screen; the widget tile
-  follows the same black.
+Feature switches (in Settings):
+
+- **Dual audio** (default on): after both outputs connect, LazyCar opens the
+  system output switcher and (via the accessibility service) ticks every
+  "Add device to group." row so both speakers share audio. The privileged
+  OnePlus sharing API can't be called by a side-loaded app (see
+  `reverse/SHARING_API.md`), hence the switcher automation. Once grouped, a
+  repeat GO skips the switcher entirely.
+- **Wi-Fi hotspot** / **Mobile data** (default off): there is no public API to
+  toggle either, so LazyCar flips their Quick Settings tiles through the
+  accessibility service, only when they are in the wrong state.
+- **Per-output volume** (default off): a slider under each output. When on, GO
+  sets that output's slider in the switcher. See "Testing volume" below.
 
 ## Notes
 
 Bluetooth connect uses the A2DP/Headset profile proxy via reflection, which is
-best-effort - failures show a Toast, they never crash the app. If a device
-won't connect on your ROM, that's the piece to revisit (`GoAction.connectA2dp`).
+best-effort: failures are logged, they never crash the app. If a device won't
+connect on your ROM, that's the piece to revisit (`GoAction.connectA2dp`).
+
+The accessibility service (`TapService`) is required for dual audio, the
+Bluetooth enable/disable dialogs, the hotspot/data tiles, and volume. Note that
+`adb install -r` and `am force-stop` both unbind it on OnePlus; re-enable it in
+Settings > Accessibility (or via `settings put secure
+enabled_accessibility_services ...`) after either.
+
+## Testing volume
+
+Per-output volume drives the switcher's `volume_seekbar` sliders through the
+accessibility service. On some ROMs (OnePlus 15 seen here) those sliders ignore
+`ACTION_SET_PROGRESS`, and the per-device sliders are disabled while grouped, so
+LazyCar verifies the value stuck, retries once, then falls back to
+`AudioManager.setStreamVolume` on the active stream.
+
+To test on a device:
+
+1. Set volumes in the app (a slider under each output; toggle "Volume" on).
+2. `adb shell am start -n com.lazyneil.lazycar/.GoActivity --ez volumeOnly true`
+   opens the switcher and applies volumes only (no full GO).
+3. Watch `adb logcat -v time -s LazyCar:V` for `volume '<name>' ...`,
+   `verify ...`, `retry ...`, or `fallback ...` lines.
+4. Dragging a slider in the app while state is ON also applies it live.
+
+Pure mapping logic lives in `VolumeMath`; run `./gradlew testDebugUnitTest`.
 
 ## Head unit / Android Auto (tablet setup)
 

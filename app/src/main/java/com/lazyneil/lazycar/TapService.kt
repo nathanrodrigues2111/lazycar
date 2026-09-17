@@ -156,45 +156,78 @@ class TapService : AccessibilityService() {
     }
 
     /**
-     * Set each speaker's slider to its saved level (Prefs.volN) when "Set volume on GO" (volOnN) is
-     * on and the row title matches the speaker name. Uses ACTION_SET_PROGRESS on the row's AbsSeekBar
-     * (any node exposing a RangeInfo), scaling 0-100 into the slider's own [min,max]. Once per row.
+     * Set each speaker's slider to its saved level (Prefs.volN) when "Set volume on GO" (volOnN) is on.
+     * Matches a slider by row title (falls back to positional order: name1 -> first volume_seekbar,
+     * name2 -> second). Scales 0-100 into the slider's own [min,max] via VolumeMath, verifies the
+     * value stuck (re-read), retries once, then falls back to AudioManager on the active stream.
+     * UNTESTED on device (phone unavailable); the OnePlus slider is known to be finicky.
      */
     private fun applyVolumes(root: AccessibilityNodeInfo, p: Prefs) {
-        val targets = listOf(p.name1 to (p.volOn1 to p.vol1), p.name2 to (p.volOn2 to p.vol2))
-            .filter { it.first.isNotEmpty() && it.second.first }
+        val targets = listOf(Triple(p.name1, p.volOn1, p.vol1), Triple(p.name2, p.volOn2, p.vol2))
+            .filter { it.first.isNotEmpty() && it.second }
         if (targets.isEmpty()) return
-        forEach(root) { n ->
-            val range = n.rangeInfo ?: return@forEach
-            val title = rowTitle(n) ?: descName(n) ?: return@forEach
-            val t = targets.firstOrNull { it.first.equals(title, true) } ?: return@forEach
-            if (title in volSet) return@forEach
-            // In a sharing group the per-device volume_seekbar is disabled (there's one group master),
-            // and SET_PROGRESS on a disabled node is a no-op that still reports ok. Don't fake success.
-            if (!n.isEnabled) { volSet.add(title); android.util.Log.e("LazyCar", "volume '$title' slider disabled (grouped, not settable on this ROM)"); return@forEach }
-            val pct = t.second.second.coerceIn(0, 100)
-            val value = range.min + (range.max - range.min) * pct / 100f
-            val b = android.os.Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, value) }
-            val before = range.current
-            val ok = n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, b)
-            android.util.Log.e("LazyCar", "volume '$title' -> $value ($pct%, range ${range.min}..${range.max}, before=$before) ok=$ok")
-            if (ok) { volSet.add(title); h.postDelayed({ verifyVolume(title, value) }, 300); return@forEach }
-            // Retry on later polls (slider may not be ready), but give up after a few tries: a
-            // sharing-group secondary member's slider rejects SET_PROGRESS on this ROM.
-            val tries = (volTries[title] ?: 0) + 1; volTries[title] = tries
-            if (tries >= 3) { volSet.add(title); android.util.Log.e("LazyCar", "volume '$title' giving up (slider not settable)") }
+        val sliders = mutableListOf<AccessibilityNodeInfo>()
+        forEach(root) { if (it.rangeInfo != null) sliders.add(it) }
+        if (sliders.isEmpty()) return
+        for ((idx, t) in targets.withIndex()) {
+            val name = t.first; if (name in volSet) continue
+            val pct = t.third.coerceIn(0, 100)
+            val node = sliders.firstOrNull { (rowTitle(it) ?: descName(it))?.equals(name, true) == true }
+                ?: sliders.getOrNull(idx) ?: continue
+            val range = node.rangeInfo ?: continue
+            if (!node.isEnabled) {   // disabled in a sharing group -> go straight to the stream fallback
+                android.util.Log.e("LazyCar", "volume '$name' slider disabled; stream fallback")
+                audioFallback(pct, name); volSet.add(name); continue
+            }
+            val value = VolumeMath.toRange(pct, range.min, range.max)
+            val ok = setProgress(node, value)
+            android.util.Log.e("LazyCar", "volume '$name' -> $value ($pct%, ${range.min}..${range.max}, before=${range.current}) ok=$ok")
+            volSet.add(name)
+            if (ok) h.postDelayed({ verifyVolume(name, pct, value) }, 300)
+            else audioFallback(pct, name)
         }
     }
 
-    /** Re-scan the panel and log the slider's current value, to confirm the set stuck. */
-    private fun verifyVolume(title: String, target: Float) {
+    private fun setProgress(n: AccessibilityNodeInfo, value: Float): Boolean {
+        val b = android.os.Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, value) }
+        return n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, b)
+    }
+
+    /** Re-read the slider; if it didn't move, nudge once by +-1, else fall back to the stream volume. */
+    private fun verifyVolume(name: String, pct: Int, value: Float) {
+        var node: AccessibilityNodeInfo? = null
         for (w in (windows ?: emptyList())) {
             val root = w.root ?: continue
             if (root.packageName != "com.android.systemui") continue
-            val n = find(root) { it.rangeInfo != null && (rowTitle(it) ?: descName(it))?.equals(title, true) == true }
-            if (n != null) { android.util.Log.e("LazyCar", "volume '$title' verify current=${n.rangeInfo?.current} (target $target)"); return }
+            node = find(root) { it.rangeInfo != null && (rowTitle(it) ?: descName(it))?.equals(name, true) == true }
+            if (node != null) break
         }
-        android.util.Log.e("LazyCar", "volume '$title' verify: slider gone")
+        val range = node?.rangeInfo
+        val cur = range?.current
+        if (range != null && cur != null && kotlin.math.abs(cur - value) <= (range.max - range.min) * 0.03f) {
+            android.util.Log.e("LazyCar", "volume '$name' verify ok current=$cur"); return
+        }
+        val tries = volTries[name] ?: 0
+        if (node != null && range != null && tries < 1) {   // one nudge retry
+            volTries[name] = tries + 1
+            val nudged = if (value < range.max) value + 1f else value - 1f
+            val ok = setProgress(node, nudged)
+            android.util.Log.e("LazyCar", "volume '$name' retry -> $nudged ok=$ok (was current=$cur)")
+            h.postDelayed({ verifyVolume(name, pct, value) }, 300); return
+        }
+        android.util.Log.e("LazyCar", "volume '$name' did not stick (current=$cur target=$value); stream fallback")
+        audioFallback(pct, name)
+    }
+
+    /** Absolute volume on the active A2DP sink via AudioManager (per-device sliders can fail on OnePlus). */
+    private fun audioFallback(pct: Int, tag: String) {
+        try {
+            val am = applicationContext.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+            val idx = VolumeMath.toStreamIndex(pct, max)
+            am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, idx, 0)
+            android.util.Log.e("LazyCar", "volume fallback '$tag' -> $idx/$max (STREAM_MUSIC)")
+        } catch (e: Exception) { android.util.Log.e("LazyCar", "volume fallback '$tag' failed ${e.message}") }
     }
 
     /** Pull "NAME" out of a "Connected to NAME." style contentDescription. */
